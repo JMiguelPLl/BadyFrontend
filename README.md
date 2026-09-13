@@ -1,56 +1,91 @@
-# Welcome to your Expo app 👋
+# Bady's - Plataforma de Distribución de Agua Purificada (Frontend) 💧🚛
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Frontend multiplataforma (Web y Móvil) desarrollado con **React Native**, **Expo SDK 57** y **Expo Router** para la gestión comercial, logística de distribución y control contable de la distribuidora **Bady's** (Tupiza, Potosí, Bolivia).
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Módulos del Sistema
 
+### 👑 Panel de Administrador (`/administrador`)
+- **Dashboard Gerencial:** Métricas en tiempo real, resumen de ventas mensuales y actividad reciente.
+- **Gestión de Pedidos y Asignaciones:** Asignación de choferes y vehículos a pedidos pendientes.
+- **Control de Clientes y Sucursales:** Registro con integración de mapas geográficos interactivos.
+- **Inventario y Productos:** Catálogo con fotografías, control de stock mínimo y reposición.
+- **Flota de Vehículos:** Control de capacidades de carga y asignación a personal.
+- **Control Contable de Deudas:** Registro de pagos a cuenta y cuentas por cobrar.
+- **Arqueos y Cierres de Caja:** Auditoría de recaudación de choferes en efectivo y QR.
+- **Módulo de Reportes Gerenciales (HU-47, HU-48, HU-49):**
+  - Reporte comercial de ventas y pedidos por rango de fechas.
+  - Reporte contable de cobranzas, arqueos y deudas.
+  - Reporte de inventario y rotación de existencias.
+  - Descarga nativa a **Microsoft Excel (.xlsx)** con columnas autoajustadas y generación de **PDFs corporativos** completos.
+
+### 🚚 Panel de Distribuidor / Chofer (`/distribuidor`)
+- **Ruta de Entregas:** Pedidos asignados con mapa satelital/híbrido interactivo y navegación GPS directa a Google Maps.
+- **Gestión de Cobranzas:** Registro de cobros en efectivo o transferencias/QR.
+- **Cierre de Caja:** Arqueo diario de recaudación al finalizar la jornada.
+
+### 🛒 Portal de Cliente (`/cliente`)
+- **Pedidos en Línea:** Creación ágil de pedidos de bidones y botellas con selección de sucursal.
+- **Seguimiento en Tiempo Real:** Estado de entregas y confirmación de recepción.
+- **Notificaciones:** Alertas modales ante ediciones de pedidos o motivos de devolución.
+- **Historial de Pagos:** Estado de cuenta y saldos pendientes.
+
+---
+
+## 🛠️ Tecnologías Utilizadas
+
+- **Framework:** React Native / Expo (SDK 57)
+- **Enrutamiento:** Expo Router (File-based Routing, SPA)
+- **Lenguaje:** TypeScript
+- **Estilos:** React Native StyleSheet con soporte para Modo Oscuro y Modo Claro
+- **Mapas:** Componente interactivo multiplataforma (Web Leaflet/OSM y React Native Maps)
+- **Reportes:** SheetJS (`xlsx`) para libros Excel binarios e impresión HTML paginada
+
+---
+
+## 🌐 Conexión al Backend
+
+El frontend se conecta al backend oficial desplegado en Render:
+- **API URL:** `https://badyback.onrender.com/api`
+- **Configuración centralizada:** [`src/constants/api.ts`](./src/constants/api.ts)
+- Permite sobreescritura dinámica mediante la variable de entorno `EXPO_PUBLIC_API_BASE`.
+
+---
+
+## 💻 Comandos de Desarrollo
+
+1. **Instalar dependencias:**
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **Iniciar servidor de desarrollo (Expo):**
    ```bash
-   npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Ejecutar en la Web:**
+   ```bash
+   npm run web
+   ```
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+4. **Compilar para producción Web (Static Site):**
+   ```bash
+   npm run build
+   ```
+   *Genera los bundles estáticos listos para desplegar en la carpeta `dist/`.*
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## ☁️ Despliegue en Render (Static Site)
 
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. En Render, crea un nuevo **Static Site**.
+2. Conecta este repositorio: `https://github.com/JMiguelPLl/BadyFrontend.git`
+3. Configura:
+   - **Build Command:** `npm install && npm run build`
+   - **Publish Directory:** `dist`
+4. En la pestaña **Redirects/Rewrites**, agrega una regla:
+   - **Type:** `Rewrite`
+   - **Source:** `/*`
+   - **Destination:** `/index.html`
