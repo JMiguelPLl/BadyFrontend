@@ -1,18 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
+import { API_BASE, API_URL } from "../constants/api";
 
 import {
   Producto,
   ProductoGuardar,
   RespuestaProducto,
 } from "../types/producto";
-
-const API_BASE =
-  Platform.OS === "web"
-    ? "https://localhost:7228"
-    : "http://10.0.2.2:5127";
-
-const API_URL = `${API_BASE}/api`;
 
 export function resolverUrlImagen(
   imagenUrl?: string | null,
@@ -21,17 +14,10 @@ export function resolverUrlImagen(
   if (imagenUrl && imagenUrl.trim()) {
     let url = imagenUrl.trim();
 
-    if (Platform.OS !== "web") {
-      url = url.replace(
-        /https?:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1)(:\d+)?/i,
-        "http://10.0.2.2:5127"
-      );
-    } else {
-      url = url.replace(
-        /https?:\/\/(0\.0\.0\.0|10\.0\.2\.2)(:\d+)?/i,
-        "https://localhost:7228"
-      );
-    }
+    url = url.replace(
+      /https?:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?/i,
+      API_BASE
+    );
 
     return url;
   }

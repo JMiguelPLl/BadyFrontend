@@ -1,16 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
+import { API_URL } from "../constants/api";
 
 import {
   Pago,
   PagoDetalle,
   PagosPorPedido,
 } from "../types/pago";
-
-const API_URL =
-  Platform.OS === "web"
-    ? "https://localhost:7228/api"
-    : "http://10.0.2.2:5127/api";
 
 async function obtenerCabeceras() {
   const token = await AsyncStorage.getItem("token");

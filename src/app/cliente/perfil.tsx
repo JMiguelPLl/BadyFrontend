@@ -16,14 +16,10 @@ import {
 } from "react-native";
 
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { API_BASE } from "../../constants/api";
 
 const ROJO = "#C62828";
 const BLANCO = "#FFFFFF";
-
-const API_URL =
-  Platform.OS === "android"
-    ? "http://10.0.2.2:5127"
-    : "https://localhost:7228";
 
 type ClientePerfil = {
   id: number;
@@ -73,7 +69,7 @@ export default function PerfilClienteScreen() {
       }
 
       const respuesta = await fetch(
-        `${API_URL}/api/Cliente/MiPerfil`,
+        `${API_BASE}/api/Cliente/MiPerfil`,
         {
           method: "GET",
           headers: {
@@ -166,7 +162,7 @@ export default function PerfilClienteScreen() {
       };
 
       const respuesta = await fetch(
-        `${API_URL}/api/Cliente/MiPerfil`,
+        `${API_BASE}/api/Cliente/MiPerfil`,
         {
           method: "PUT",
           headers: {

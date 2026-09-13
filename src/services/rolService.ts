@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
+import { API_URL } from "../constants/api";
 
 import {
   EstadoRol,
@@ -7,11 +7,6 @@ import {
   Rol,
   RolFormulario,
 } from "../types/rol";
-
-const API_URL =
-  Platform.OS === "web"
-    ? "https://localhost:7228/api"
-    : "http://10.0.2.2:5127/api";
 
 async function obtenerHeaders() {
   const token = await AsyncStorage.getItem("token");
