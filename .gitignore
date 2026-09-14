@@ -45,3 +45,7 @@ example
 # local ide
 .claude/
 
+# Mobile binaries
+*.apk
+*.aab
+
