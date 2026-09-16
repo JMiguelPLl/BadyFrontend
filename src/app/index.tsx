@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -55,6 +56,26 @@ export default function Index() {
     error,
     setError,
   ] = useState("");
+
+  const scrollRef = useRef<ScrollView>(null);
+  const contrasenaInputRef = useRef<TextInput>(null);
+  const [tecladoVisible, setTecladoVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setTecladoVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setTecladoVisible(false)
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const cambiarCampo = (
     campo: CampoFormulario,
@@ -215,12 +236,17 @@ export default function Index() {
         }
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[
             styles.scrollContent,
             esPantallaGrande &&
               styles.scrollContentDesktop,
+            !esPantallaGrande && {
+              paddingBottom: tecladoVisible ? 280 : 30,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={
             false
           }
@@ -243,7 +269,10 @@ export default function Index() {
                 styles.brandPanel,
                 esPantallaGrande
                   ? styles.brandPanelDesktop
-                  : styles.brandPanelMobile,
+                  : [
+                      styles.brandPanelMobile,
+                      tecladoVisible && styles.brandPanelMobileCompact,
+                    ],
               ]}
             >
               <View
@@ -270,17 +299,23 @@ export default function Index() {
                 }
               >
                 <View
-                  style={
-                    styles.logoBackground
-                  }
+                  style={[
+                    styles.logoBackground,
+                    !esPantallaGrande &&
+                      tecladoVisible &&
+                      styles.logoBackgroundCompact,
+                  ]}
                 >
                   <Image
                     source={require(
                       "../../assets/images/logobady2.png"
                     )}
-                    style={
-                      styles.logo
-                    }
+                    style={[
+                      styles.logo,
+                      !esPantallaGrande &&
+                        tecladoVisible &&
+                        styles.logoCompact,
+                    ]}
                     resizeMode="contain"
                   />
                 </View>
@@ -357,40 +392,50 @@ export default function Index() {
                 }
               >
                 <View
-                  style={
-                    styles.heading
-                  }
+                  style={[
+                    styles.heading,
+                    !esPantallaGrande &&
+                      tecladoVisible &&
+                      styles.headingCompact,
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.headingIcon,
-                      isDark && { backgroundColor: "rgba(200, 35, 27, 0.22)" },
-                    ]}
-                  >
-                    <Ionicons
-                      name="person-outline"
-                      size={23}
-                      color={colors.primary}
-                    />
-                  </View>
+                  {(!tecladoVisible || esPantallaGrande) && (
+                    <View
+                      style={[
+                        styles.headingIcon,
+                        isDark && { backgroundColor: "rgba(200, 35, 27, 0.22)" },
+                      ]}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={23}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
 
                   <Text
                     style={[
                       styles.welcomeText,
+                      !esPantallaGrande &&
+                        tecladoVisible &&
+                        styles.welcomeTextCompact,
                       { color: colors.text },
                     ]}
                   >
                     Bienvenido
                   </Text>
 
-                  <Text
-                    style={[
-                      styles.headingDescription,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    Ingresa a tu cuenta para continuar
-                  </Text>
+                  {(!tecladoVisible || esPantallaGrande) && (
+                    <Text
+                      style={[
+                        styles.headingDescription,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Ingresa a tu cuenta para continuar
+                    </Text>
+                  )}
                 </View>
 
                 {error ? (
@@ -480,6 +525,19 @@ export default function Index() {
                         !cargando
                       }
                       returnKeyType="next"
+                      onSubmitEditing={() =>
+                        contrasenaInputRef.current?.focus()
+                      }
+                      onFocus={() => {
+                        if (!esPantallaGrande) {
+                          setTimeout(() => {
+                            scrollRef.current?.scrollTo({
+                              y: 70,
+                              animated: true,
+                            });
+                          }, 150);
+                        }
+                      }}
                     />
                   </View>
                 </View>
@@ -517,6 +575,7 @@ export default function Index() {
                     />
 
                     <TextInput
+                      ref={contrasenaInputRef}
                       style={[
                         styles.passwordInput,
                         { color: colors.text },
@@ -549,6 +608,15 @@ export default function Index() {
                       onSubmitEditing={
                         manejarSubmit
                       }
+                      onFocus={() => {
+                        if (!esPantallaGrande) {
+                          setTimeout(() => {
+                            scrollRef.current?.scrollToEnd({
+                              animated: true,
+                            });
+                          }, 150);
+                        }
+                      }}
                     />
 
                     <Pressable
@@ -740,6 +808,14 @@ const styles =
         "center",
     },
 
+    brandPanelMobileCompact: {
+      minHeight: 110,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 16,
+      justifyContent: "center",
+    },
+
     circleTop: {
       position: "absolute",
       top: -180,
@@ -824,6 +900,17 @@ const styles =
           : 145,
     },
 
+    logoBackgroundCompact: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+    },
+
+    logoCompact: {
+      width: 80,
+      height: 80,
+    },
+
     brandName: {
       marginTop: 20,
       color: "#ffffff",
@@ -906,6 +993,11 @@ const styles =
       marginBottom: 31,
     },
 
+    headingCompact: {
+      alignItems: "center",
+      marginBottom: 14,
+    },
+
     headingIcon: {
       width: 48,
       height: 48,
@@ -922,6 +1014,10 @@ const styles =
       color: "#20242a",
       fontSize: 32,
       fontWeight: "800",
+    },
+
+    welcomeTextCompact: {
+      fontSize: 24,
     },
 
     headingDescription: {
