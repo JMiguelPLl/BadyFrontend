@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   cambiarEstadoAsignacion,
   crearAsignacion,
@@ -1315,6 +1317,15 @@ function TablaVehiculos({
   detalle: (vehiculo: Vehiculo) => void;
 }) {
   const { colors, isDark } = useAppTheme();
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados,
+  } = usePaginacion(datos);
 
   if (!datos.length) {
     return (
@@ -1374,7 +1385,7 @@ function TablaVehiculos({
         </Text>
       </View>
 
-      {datos.map((vehiculo) => (
+      {datosPaginados.map((vehiculo) => (
         <View
           key={vehiculo.id}
           style={[
@@ -1476,6 +1487,15 @@ function TablaVehiculos({
           </View>
         </View>
       ))}
+
+      <Paginacion
+        paginaActual={paginaActual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        registrosPorPagina={registrosPorPagina}
+        onCambiarPagina={setPaginaActual}
+        onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+      />
     </View>
   );
 }
@@ -1492,6 +1512,15 @@ function TablaAsignaciones({
   quitar: (asignacion: AsignacionVehiculo) => void;
 }) {
   const { colors, isDark } = useAppTheme();
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados,
+  } = usePaginacion(datos);
 
   if (!datos.length) {
     return (
@@ -1551,7 +1580,7 @@ function TablaAsignaciones({
         </Text>
       </View>
 
-      {datos.map((asignacion) => (
+      {datosPaginados.map((asignacion) => (
         <View
           key={asignacion.id}
           style={[
@@ -1653,6 +1682,15 @@ function TablaAsignaciones({
           </View>
         </View>
       ))}
+
+      <Paginacion
+        paginaActual={paginaActual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        registrosPorPagina={registrosPorPagina}
+        onCambiarPagina={setPaginaActual}
+        onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+      />
     </View>
   );
 }

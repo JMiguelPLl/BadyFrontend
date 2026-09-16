@@ -12,7 +12,9 @@ import {
 } from "react-native";
 
 import ModalSistema from "../../components/comun/ModalSistema";
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   actualizarProducto,
   cambiarEstadoProducto,
@@ -191,6 +193,16 @@ export default function ProductosAdministrador() {
       return coincideBusqueda && coincideFiltro;
     });
   }, [productos, busqueda, filtro]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: productosPaginados,
+  } = usePaginacion(productosFiltrados);
 
   const totalActivos = useMemo(
     () =>
@@ -951,7 +963,7 @@ export default function ProductosAdministrador() {
               </Text>
             </View>
 
-            {productosFiltrados.map((producto) => {
+            {productosPaginados.map((producto) => {
               const sinStock = producto.stock === 0;
               const pocoStock =
                 producto.stock > 0 && producto.stock < STOCK_MINIMO;
@@ -1164,6 +1176,15 @@ export default function ProductosAdministrador() {
                 </View>
               );
             })}
+
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
           </View>
         )}
       </View>

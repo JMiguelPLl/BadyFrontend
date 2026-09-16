@@ -10,7 +10,9 @@ import {
 } from "react-native";
 
 import ModalSistema from "../../components/comun/ModalSistema";
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   actualizarUsuario,
   cambiarEstadoUsuario,
@@ -133,6 +135,16 @@ export default function UsuariosAdministrador() {
       );
     });
   }, [usuarios, busqueda, filtro]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: usuariosPaginados,
+  } = usePaginacion(usuariosFiltrados);
 
   const totalActivos = useMemo(
     () =>
@@ -645,7 +657,7 @@ export default function UsuariosAdministrador() {
               </Text>
             </View>
 
-            {usuariosFiltrados.map((usuario) => (
+            {usuariosPaginados.map((usuario) => (
               <View
                 key={usuario.id}
                 style={[
@@ -851,24 +863,17 @@ export default function UsuariosAdministrador() {
                 </View>
               </View>
             ))}
+
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
           </View>
         )}
-
-        <View
-          style={[
-            styles.pieTabla,
-            isDark && { borderTopColor: colors.borderLight },
-          ]}
-        >
-          <Text
-            style={[
-              styles.pieTablaTexto,
-              isDark && { color: colors.textSecondary },
-            ]}
-          >
-            Mostrando {usuariosFiltrados.length} de {usuarios.length} usuarios
-          </Text>
-        </View>
       </View>
 
       <ModalSistema

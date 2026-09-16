@@ -13,7 +13,9 @@ import {
 } from "react-native";
 
 import MapaSucursal from "../../components/MapaSucursal";
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import { listarClientes } from "../../services/clienteService";
 import {
   agregarSucursal,
@@ -255,6 +257,16 @@ export default function SucursalesAdministrador() {
       })
       .filter((item): item is ClienteAgrupado => item !== null);
   }, [clientesAgrupados, busqueda, filtroEstado]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: clientesPaginados,
+  } = usePaginacion(clientesFiltrados);
 
   // Handlers para formularios y modales
   const abrirCrearSucursal = (idClientePredeterminado?: number) => {
@@ -821,7 +833,7 @@ export default function SucursalesAdministrador() {
             </View>
 
             {/* Listado Agrupado de Clientes con sus Sucursales */}
-            {clientesFiltrados.map((item) => {
+            {clientesPaginados.map((item) => {
               const expandido = Boolean(clientesExpandidos[item.id]);
               const tieneSucursales = item.sucursales.length > 0;
               const inicial = item.nombre.charAt(0).toUpperCase() || "C";
@@ -1210,6 +1222,15 @@ export default function SucursalesAdministrador() {
                 </View>
               );
             })}
+
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
           </View>
         )}
       </View>

@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   crearAsignacionPedido,
   editarAsignacionPedido,
@@ -189,6 +191,16 @@ export default function AsignacionPedidosScreen() {
       );
     });
   }, [pedidos, busqueda, estadoFiltro, fechaDesde, fechaHasta]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: pedidosPaginados,
+  } = usePaginacion(pedidosFiltrados);
 
   const obtenerAsignacionPedido = (
     idPedido: number
@@ -744,7 +756,7 @@ export default function AsignacionPedidosScreen() {
               <Head texto="Acciones" estilo={styles.colAcciones} />
             </View>
 
-            {pedidosFiltrados.map((pedido) => {
+            {pedidosPaginados.map((pedido) => {
               const asignacion = obtenerAsignacionPedido(pedido.id);
 
               return (
@@ -933,6 +945,15 @@ export default function AsignacionPedidosScreen() {
                 </View>
               );
             })}
+
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
           </View>
         )}
       </View>

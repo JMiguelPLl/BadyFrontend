@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   cerrarCajaPorIdAdmin,
   listarHistorialCierresAdmin,
@@ -147,6 +149,16 @@ export default function CierresCajaAdministrador() {
       );
     });
   }, [cierres, busqueda, estadoFiltro, fechaDesde, fechaHasta]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: cierresPaginados,
+  } = usePaginacion(cierresFiltrados);
 
   const abrirMensaje = (texto: string, error = false) => {
     setMensaje(texto);
@@ -614,7 +626,7 @@ export default function CierresCajaAdministrador() {
                 <Head texto="Acciones" estilo={styles.colAcciones} />
               </View>
 
-              {cierresFiltrados.map((item) => (
+              {cierresPaginados.map((item) => (
                 <View
                   key={item.id}
                   style={[
@@ -778,7 +790,16 @@ export default function CierresCajaAdministrador() {
                   </View>
                 </View>
               ))}
-            </View>
+
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
+          </View>
         )}
       </View>
 

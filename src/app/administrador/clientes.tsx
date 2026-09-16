@@ -10,7 +10,9 @@ import {
 } from "react-native";
 
 import ModalSistema from "../../components/comun/ModalSistema";
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   actualizarCliente,
   cambiarEstadoCliente,
@@ -117,6 +119,16 @@ export default function ClientesAdministrador() {
       );
     });
   }, [clientes, busqueda]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: clientesPaginados,
+  } = usePaginacion(clientesFiltrados);
 
   const abrirAgregar = () => {
     setClienteSeleccionado(null);
@@ -729,7 +741,7 @@ export default function ClientesAdministrador() {
               </Text>
             </View>
 
-              {clientesFiltrados.map((cliente) => (
+              {clientesPaginados.map((cliente) => (
                 <View
                   key={cliente.id}
                   style={[
@@ -905,24 +917,17 @@ export default function ClientesAdministrador() {
                   </View>
                 </View>
               ))}
-            </View>
-        )}
 
-        <View
-          style={[
-            styles.pieTabla,
-            isDark && { borderTopColor: colors.borderLight },
-          ]}
-        >
-          <Text
-            style={[
-              styles.pieTablaTexto,
-              isDark && { color: colors.textSecondary },
-            ]}
-          >
-            Mostrando {clientesFiltrados.length} de {clientes.length} clientes
-          </Text>
-        </View>
+            <Paginacion
+              paginaActual={paginaActual}
+              totalPaginas={totalPaginas}
+              totalRegistros={totalRegistros}
+              registrosPorPagina={registrosPorPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+            />
+          </View>
+        )}
       </View>
 
       <ModalSistema

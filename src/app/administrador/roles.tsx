@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -10,7 +11,9 @@ import {
 } from "react-native";
 
 import ModalSistema from "../../components/comun/ModalSistema";
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   actualizarRol,
   cambiarEstadoRol,
@@ -120,6 +123,16 @@ export default function RolesAdministrador() {
       ).length,
     [roles]
   );
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: rolesPaginados,
+  } = usePaginacion(rolesFiltrados);
 
   const abrirAgregar = () => {
     setRolSeleccionado(null);
@@ -540,7 +553,7 @@ export default function RolesAdministrador() {
               </Text>
             </View>
 
-              {rolesFiltrados.map((rol) => (
+              {rolesPaginados.map((rol) => (
                 <View
                   key={rol.id}
                   style={[
@@ -692,24 +705,35 @@ export default function RolesAdministrador() {
                   </View>
                 </View>
               ))}
+
+              <Paginacion
+                paginaActual={paginaActual}
+                totalPaginas={totalPaginas}
+                totalRegistros={totalRegistros}
+                registrosPorPagina={registrosPorPagina}
+                onCambiarPagina={setPaginaActual}
+                onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+              />
             </View>
         )}
 
-        <View
-          style={[
-            styles.pieTabla,
-            isDark && { borderTopColor: colors.borderLight },
-          ]}
-        >
-          <Text
+        {Platform.OS !== "web" && (
+          <View
             style={[
-              styles.pieTablaTexto,
-              isDark && { color: colors.textSecondary },
+              styles.pieTabla,
+              isDark && { borderTopColor: colors.borderLight },
             ]}
           >
-            Mostrando {rolesFiltrados.length} de {roles.length} roles
-          </Text>
-        </View>
+            <Text
+              style={[
+                styles.pieTablaTexto,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              Mostrando {rolesFiltrados.length} de {roles.length} roles
+            </Text>
+          </View>
+        )}
       </View>
 
       <ModalSistema

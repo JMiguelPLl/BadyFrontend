@@ -30,6 +30,8 @@ import {
   UsuarioSesionPago,
 } from "../../types/pagoAdmin";
 
+import Paginacion from "../../components/comun/Paginacion";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import { styles } from "../../styles/administrador/pagos.styles";
 
 type EstadoFiltro = "Todos" | "Pendiente" | "Pagado";
@@ -165,6 +167,16 @@ export default function PagosAdministrador() {
     () => deudas.filter((d) => d.saldoPendiente <= 0).length,
     [deudas]
   );
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: deudasPaginadas,
+  } = usePaginacion(deudasFiltradas);
 
   const totalPorCobrar = useMemo(
     () => deudas.reduce((acc, d) => acc + d.saldoPendiente, 0),
@@ -661,7 +673,7 @@ export default function PagosAdministrador() {
                 <Head texto="Acciones" estilo={styles.colAcciones} />
               </View>
 
-              {deudasFiltradas.map((item) => (
+              {deudasPaginadas.map((item) => (
                 <View
                   key={item.idPedido}
                   style={[
@@ -852,6 +864,15 @@ export default function PagosAdministrador() {
                   </View>
                 </View>
               ))}
+
+              <Paginacion
+                paginaActual={paginaActual}
+                totalPaginas={totalPaginas}
+                totalRegistros={totalRegistros}
+                registrosPorPagina={registrosPorPagina}
+                onCambiarPagina={setPaginaActual}
+                onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+              />
             </View>
         )}
       </View>

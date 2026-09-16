@@ -32,6 +32,8 @@ import {
   ProductoPedido,
   SucursalPedido,
 } from "../../types/pedido";
+import Paginacion from "../../components/comun/Paginacion";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import {
   BLANCO,
   ROJO,
@@ -307,6 +309,16 @@ export default function PedidosClienteScreen() {
 
     return lista;
   }, [pedidos, filtroEstado, busqueda]);
+
+  const {
+    paginaActual,
+    setPaginaActual,
+    registrosPorPagina,
+    setRegistrosPorPagina,
+    totalPaginas,
+    totalRegistros,
+    datosPaginados: pedidosPaginados,
+  } = usePaginacion(pedidosFiltrados);
 
   const verDetalle = async (pedido: Pedido) => {
     try {
@@ -836,7 +848,7 @@ export default function PedidosClienteScreen() {
             </Text>
           </View>
         ) : (
-          pedidosFiltrados.map((pedido) => {
+          pedidosPaginados.map((pedido) => {
             const conf = obtenerConfiguracionEstado(pedido.estado);
             const totalProductos = (pedido.detalles || []).reduce((acc, d) => acc + Number(d.cantidad ?? 0), 0);
             const saldoPend = Number(pedido.saldoPendiente ?? 0);
@@ -1133,6 +1145,15 @@ export default function PedidosClienteScreen() {
             );
           })
         )}
+
+        <Paginacion
+          paginaActual={paginaActual}
+          totalPaginas={totalPaginas}
+          totalRegistros={totalRegistros}
+          registrosPorPagina={registrosPorPagina}
+          onCambiarPagina={setPaginaActual}
+          onCambiarRegistrosPorPagina={setRegistrosPorPagina}
+        />
       </ScrollView>
 
       {/* Modal de Detalle */}
