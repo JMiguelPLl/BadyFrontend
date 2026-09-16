@@ -20,11 +20,11 @@ import {
   crearRol,
   listarRoles,
 } from "../../services/rolService";
+import { styles } from "../../styles/administrador/roles.styles";
 import {
   Rol,
   RolFormulario,
 } from "../../types/rol";
-import { styles } from "../../styles/administrador/roles.styles";
 
 type FiltroRol =
   | "Todos"
@@ -288,17 +288,7 @@ export default function RolesAdministrador() {
           </Text>
         </View>
 
-        <Pressable
-          onPress={abrirAgregar}
-          style={({ pressed }) => [
-            styles.botonAgregar,
-            { backgroundColor: colors.primary },
-            pressed && styles.botonPresionado,
-          ]}
-        >
-          <Ionicons name="add-outline" size={20} color="#ffffff" />
-          <Text style={styles.botonAgregarTexto}>Agregar rol</Text>
-        </Pressable>
+       
       </View>
 
       <View style={styles.resumen}>
