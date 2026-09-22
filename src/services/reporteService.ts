@@ -1,5 +1,7 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import * as XLSX from "xlsx";
+import { API_URL } from "../constants/api";
 import { listarPedidos } from "./asignacionPedidoService";
 import { listarHistorialCierresAdmin } from "./cierreCajaAdminService";
 import { listarClientes } from "./clienteService";
@@ -14,9 +16,11 @@ import {
   ArqueoItemReporte,
   CobroItemReporte,
   CuentaPorCobrarReporte,
+  FiltrosReporteMetodosPago,
   KpisCobranzas,
   KpisInventario,
   KpisVentas,
+  PagoMetodoReporteItem,
   PresetFecha,
   ProductoRotacionReporte,
   ReporteCobranzasFiltros,
@@ -24,6 +28,7 @@ import {
   ResultadoReporteCobranzas,
   ResultadoReporteInventario,
   ResultadoReporteVentas,
+  ResumenMetodosPago,
   TopProductoVenta,
   VentaItemReporte,
   VentasPorFecha,
@@ -1117,5 +1122,173 @@ export function imprimirReporteHtml(htmlContent: string): void {
   } else {
     console.log("Impresión solo disponible en Web.");
   }
+}
+
+// =========================================================
+// REPORTE DE MÉTODOS DE PAGO: EFECTIVO, QR Y RESUMEN
+// =========================================================
+
+async function obtenerHeaders() {
+  const token = await AsyncStorage.getItem("token");
+
+  return {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function leer<T>(response: Response): Promise<T> {
+  let resultado: any = null;
+
+  try {
+    resultado = await response.json();
+  } catch {
+    resultado = null;
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Tu sesión expiró. Inicia sesión nuevamente.");
+    }
+
+    if (response.status === 403) {
+      throw new Error("No tienes permisos para realizar esta operación.");
+    }
+
+    throw new Error(
+      resultado?.message ||
+        resultado?.title ||
+        "No se pudo procesar la solicitud."
+    );
+  }
+
+  return resultado as T;
+}
+
+function normalizarPagoReporte(item: any): PagoMetodoReporteItem {
+  return {
+    idPago: Number(item?.idPago ?? item?.IdPago ?? item?.id ?? item?.Id ?? 0),
+    idPedido: Number(item?.idPedido ?? item?.IdPedido ?? 0),
+    idCliente: Number(item?.idCliente ?? item?.IdCliente ?? 0),
+    cliente: item?.cliente ?? item?.Cliente ?? "Cliente",
+    idSucursal:
+      item?.idSucursal ?? item?.IdSucursal
+        ? Number(item?.idSucursal ?? item?.IdSucursal)
+        : undefined,
+    sucursal: item?.sucursal ?? item?.Sucursal ?? undefined,
+    idUsuario:
+      item?.idUsuario ?? item?.IdUsuario
+        ? Number(item?.idUsuario ?? item?.IdUsuario)
+        : undefined,
+    usuario:
+      item?.usuario ??
+      item?.Usuario ??
+      item?.cobradoPor ??
+      item?.CobradoPor ??
+      undefined,
+    idTipoPago: Number(item?.idTipoPago ?? item?.IdTipoPago ?? 0),
+    tipoPago:
+      item?.tipoPago ??
+      item?.TipoPago ??
+      (Number(item?.idTipoPago ?? item?.IdTipoPago ?? 0) === 2 ? "QR" : "Efectivo"),
+    montoPagado: Number(
+      item?.montoPagado ?? item?.MontoPagado ?? item?.monto ?? item?.Monto ?? 0
+    ),
+    fechaPago:
+      item?.fechaPago ??
+      item?.FechaPago ??
+      item?.fecha ??
+      item?.Fecha ??
+      "",
+    estadoPago:
+      item?.estadoPago ??
+      item?.EstadoPago ??
+      item?.estado ??
+      item?.Estado ??
+      "Completado",
+  };
+}
+
+export async function obtenerReportePagosEfectivo(
+  filtros?: FiltrosReporteMetodosPago
+): Promise<PagoMetodoReporteItem[]> {
+  const params = new URLSearchParams();
+  if (filtros?.fechaDesde) params.append("fechaDesde", filtros.fechaDesde);
+  if (filtros?.fechaHasta) params.append("fechaHasta", filtros.fechaHasta);
+  if (filtros?.idUsuario) params.append("idUsuario", String(filtros.idUsuario));
+  if (filtros?.idCliente) params.append("idCliente", String(filtros.idCliente));
+
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_URL}/Pago/Reportes/Efectivo${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  const data = await leer<any[]>(response);
+  return Array.isArray(data) ? data.map(normalizarPagoReporte) : [];
+}
+
+export async function obtenerReportePagosQR(
+  filtros?: FiltrosReporteMetodosPago
+): Promise<PagoMetodoReporteItem[]> {
+  const params = new URLSearchParams();
+  if (filtros?.fechaDesde) params.append("fechaDesde", filtros.fechaDesde);
+  if (filtros?.fechaHasta) params.append("fechaHasta", filtros.fechaHasta);
+  if (filtros?.idUsuario) params.append("idUsuario", String(filtros.idUsuario));
+  if (filtros?.idCliente) params.append("idCliente", String(filtros.idCliente));
+
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_URL}/Pago/Reportes/QR${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  const data = await leer<any[]>(response);
+  return Array.isArray(data) ? data.map(normalizarPagoReporte) : [];
+}
+
+export async function obtenerResumenMetodosPago(
+  fechaDesde?: string,
+  fechaHasta?: string
+): Promise<ResumenMetodosPago> {
+  const params = new URLSearchParams();
+  if (fechaDesde) params.append("fechaDesde", fechaDesde);
+  if (fechaHasta) params.append("fechaHasta", fechaHasta);
+
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_URL}/Pago/Reportes/ResumenMetodosPago${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  const item = await leer<any>(response);
+  return {
+    totalGeneral: Number(item?.totalGeneral ?? item?.TotalGeneral ?? 0),
+    cantidadPagosTotal: Number(
+      item?.cantidadPagosTotal ?? item?.CantidadPagosTotal ?? 0
+    ),
+    totalEfectivo: Number(item?.totalEfectivo ?? item?.TotalEfectivo ?? 0),
+    cantidadPagosEfectivo: Number(
+      item?.cantidadPagosEfectivo ?? item?.CantidadPagosEfectivo ?? 0
+    ),
+    porcentajeEfectivo: Number(
+      item?.porcentajeEfectivo ?? item?.PorcentajeEfectivo ?? 0
+    ),
+    totalQR: Number(item?.totalQR ?? item?.TotalQR ?? 0),
+    cantidadPagosQR: Number(
+      item?.cantidadPagosQR ?? item?.CantidadPagosQR ?? 0
+    ),
+    porcentajeQR: Number(item?.porcentajeQR ?? item?.PorcentajeQR ?? 0),
+  };
 }
 

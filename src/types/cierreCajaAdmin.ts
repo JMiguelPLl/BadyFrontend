@@ -64,3 +64,23 @@ export interface RespuestaCerrarCajaAdmin {
   message?: string;
   cierreCaja?: CierreCajaAdmin;
 }
+
+export interface EstadoCajaDistribuidorAdmin {
+  idUsuario: number;
+  usuario: string;
+  correo?: string | null;
+  correoUsuario?: string | null;
+  cajaAbierta: boolean;
+  idCierreCaja?: number | null;
+  fechaApertura?: string | null;
+  totalEfectivo: number;
+  totalQR: number;
+  totalRecaudado: number;
+  cantidadPagos: number;
+}
+
+export interface RespuestaAccionCajaAdmin {
+  message?: string;
+  success?: boolean;
+  [key: string]: any;
+}

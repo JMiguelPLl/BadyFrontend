@@ -692,4 +692,177 @@ export const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "900",
   },
+
+  // Pestañas superiores
+  contenedorPestanas: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
+
+  pestanaBoton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dfe3e8",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  pestanaBotonActiva: {
+    backgroundColor: "#b82018",
+    borderColor: "#b82018",
+  },
+
+  pestanaTexto: {
+    color: "#444b53",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  pestanaTextoActiva: {
+    color: "#ffffff",
+  },
+
+  badgeContador: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: "#f5f6f8",
+  },
+
+  badgeContadorActivo: {
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+  },
+
+  badgeContadorTexto: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#6b7280",
+  },
+
+  badgeContadorTextoActivo: {
+    color: "#ffffff",
+  },
+
+  // Botones de acción masiva
+  barraAccionesMasivas: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: 16,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#eceff2",
+    marginBottom: 18,
+  },
+
+  infoMasiva: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 260,
+  },
+
+  iconoMasivo: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef2f2",
+  },
+
+  tituloMasivo: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#1f2329",
+  },
+
+  subtituloMasivo: {
+    fontSize: 11,
+    color: "#737b84",
+    marginTop: 2,
+  },
+
+  botonesMasivosGrupo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+
+  botonAbrirTodos: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 11,
+    backgroundColor: "#15803d",
+  },
+
+  botonAbrirTodosTexto: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  botonCerrarTodos: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 11,
+    backgroundColor: "#b82018",
+  },
+
+  botonCerrarTodosTexto: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  // Botones individuales de distribuidor
+  botonAccionIndividual: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+
+  botonAbrirIndiv: {
+    backgroundColor: "#ecfdf3",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+
+  botonAbrirIndivTexto: {
+    color: "#15803d",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  botonCerrarIndiv: {
+    backgroundColor: "#fff1f0",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+
+  botonCerrarIndivTexto: {
+    color: "#b82018",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

@@ -15,8 +15,6 @@ import {
 } from "react-native";
 
 import {
-  abrirCaja,
-  cerrarCajaActual,
   listarHistorialCajas,
   obtenerCajaActual,
   obtenerCierreCajaPorId,
@@ -25,7 +23,7 @@ import { CierreCaja, CierreCajaDetalle } from "../../types/cierreCaja";
 import { BLANCO, ROJO, styles } from "../../styles/distribuidorStyles";
 import { useAppTheme } from "../../hooks/useAppTheme";
 
-type ModalActivo = "ninguno" | "abrir" | "cerrar" | "detalle";
+type ModalActivo = "ninguno" | "detalle";
 
 export default function CajaDistribuidorScreen() {
   const router = useRouter();
@@ -109,42 +107,6 @@ export default function CajaDistribuidorScreen() {
       cantidad: cajaActual.cantidadPagos || pagos.length,
     };
   }, [cajaActual]);
-
-  const confirmarApertura = async () => {
-    try {
-      setProcesando(true);
-      await abrirCaja({ observacion: observacion.trim() || undefined });
-      setModal("ninguno");
-      setObservacion("");
-      Alert.alert("Éxito", "Caja abierta correctamente para el turno.");
-      cargarDatos(true);
-    } catch (e) {
-      Alert.alert(
-        "Error al abrir caja",
-        e instanceof Error ? e.message : "No se pudo abrir la caja."
-      );
-    } finally {
-      setProcesando(false);
-    }
-  };
-
-  const confirmarCierre = async () => {
-    try {
-      setProcesando(true);
-      await cerrarCajaActual({ observacion: observacion.trim() || undefined });
-      setModal("ninguno");
-      setObservacion("");
-      Alert.alert("Éxito", "Cierre de caja completado y liquidado con éxito.");
-      cargarDatos(true);
-    } catch (e) {
-      Alert.alert(
-        "Error al cerrar caja",
-        e instanceof Error ? e.message : "No se pudo realizar el cierre de caja."
-      );
-    } finally {
-      setProcesando(false);
-    }
-  };
 
   const abrirDetalleHistorico = async (item: CierreCaja) => {
     try {
@@ -406,7 +368,7 @@ export default function CajaDistribuidorScreen() {
               >
                 {cajaActual
                   ? `Abierta el ${formatearFecha(cajaActual.fechaApertura)}`
-                  : "No tienes una sesión de caja abierta"}
+                  : "Caja no aperturada por administración"}
               </Text>
             </View>
 
@@ -438,7 +400,7 @@ export default function CajaDistribuidorScreen() {
                   },
                 ]}
               >
-                {cajaActual ? "ABIERTA" : "SIN CAJA"}
+                {cajaActual ? "ABIERTA" : "CERRADA"}
               </Text>
             </View>
           </View>
@@ -519,21 +481,6 @@ export default function CajaDistribuidorScreen() {
               )}
 
               <View style={{ gap: 10, marginTop: 4 }}>
-                <Pressable
-                  style={[
-                    styles.btn,
-                    styles.btnPrimary,
-                    { minHeight: 48, backgroundColor: colors.primary },
-                  ]}
-                  onPress={() => {
-                    setObservacion("");
-                    setModal("cerrar");
-                  }}
-                >
-                  <Ionicons name="lock-closed-outline" size={18} color={BLANCO} />
-                  <Text style={styles.btnPrimaryText}>REALIZAR CIERRE DE CAJA</Text>
-                </Pressable>
-
                 <Pressable
                   style={[
                     styles.btn,
@@ -658,7 +605,7 @@ export default function CajaDistribuidorScreen() {
                   isDark && { backgroundColor: "rgba(200, 35, 27, 0.22)" },
                 ]}
               >
-                <Ionicons name="wallet-outline" size={38} color={colors.primary} />
+                <Ionicons name="lock-closed-outline" size={38} color={colors.primary} />
               </View>
               <Text
                 style={[
@@ -666,7 +613,7 @@ export default function CajaDistribuidorScreen() {
                   isDark && { color: colors.text },
                 ]}
               >
-                Inicia tu turno de caja
+                Caja cerrada por administración
               </Text>
               <Text
                 style={[
@@ -674,22 +621,25 @@ export default function CajaDistribuidorScreen() {
                   isDark && { color: colors.textSecondary },
                 ]}
               >
-                Abre una nueva caja para registrar y controlar todos los cobros de tus entregas.
+                Tu caja no se encuentra aperturada. El administrador del sistema es quien realiza la apertura de tu caja para que puedas registrar cobros.
               </Text>
 
               <Pressable
                 style={[
                   styles.btn,
-                  styles.btnPrimary,
-                  { width: "100%", marginTop: 16, minHeight: 48, backgroundColor: colors.primary },
+                  styles.btnSoft,
+                  { width: "100%", marginTop: 16, minHeight: 48 },
+                  isDark && {
+                    backgroundColor: "rgba(200, 35, 27, 0.18)",
+                    borderColor: "rgba(200, 35, 27, 0.35)",
+                  },
                 ]}
-                onPress={() => {
-                  setObservacion("");
-                  setModal("abrir");
-                }}
+                onPress={() => cargarDatos(true)}
               >
-                <Ionicons name="add-circle-outline" size={20} color={BLANCO} />
-                <Text style={styles.btnPrimaryText}>ABRIR NUEVA CAJA</Text>
+                <Ionicons name="refresh-outline" size={20} color={colors.primary} />
+                <Text style={[styles.btnSoftText, { color: colors.primary }]}>
+                  Actualizar estado de caja
+                </Text>
               </Pressable>
             </View>
           )}
@@ -912,324 +862,6 @@ export default function CajaDistribuidorScreen() {
           })
         )}
       </ScrollView>
-
-      {/* Modal Apertura de Caja */}
-      <Modal
-        visible={modal === "abrir"}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModal("ninguno")}
-      >
-        <View
-          style={[
-            styles.modalBg,
-            isDark && { backgroundColor: colors.modalBackdrop },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalContainer,
-              isDark && {
-                backgroundColor: colors.modalBg,
-                borderColor: colors.border,
-                borderTopWidth: 1,
-              },
-            ]}
-          >
-            <View style={styles.modalHandle} />
-
-            <View
-              style={[
-                styles.modalHeader,
-                isDark && { borderBottomColor: colors.borderLight },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modalTitle,
-                  isDark && { color: colors.text },
-                ]}
-              >
-                Apertura de Caja
-              </Text>
-              <Pressable
-                style={[
-                  styles.modalCloseBtn,
-                  isDark && { backgroundColor: colors.surfaceElevated },
-                ]}
-                onPress={() => setModal("ninguno")}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={isDark ? colors.textSecondary : "#555"}
-                />
-              </Pressable>
-            </View>
-
-            <Text
-              style={[
-                styles.etiqueta,
-                isDark && { color: colors.textSecondary },
-              ]}
-            >
-              Observación de apertura (Opcional)
-            </Text>
-            <View
-              style={[
-                styles.inputContainer,
-                { minHeight: 80, alignItems: "flex-start", paddingVertical: 10 },
-                isDark && {
-                  backgroundColor: colors.inputBg,
-                  borderColor: colors.inputBorder,
-                },
-              ]}
-            >
-              <TextInput
-                style={[
-                  styles.input,
-                  { height: 60, textAlignVertical: "top" },
-                  isDark && { color: colors.text },
-                ]}
-                value={observacion}
-                onChangeText={setObservacion}
-                placeholder="Ingresa notas sobre el turno o caja..."
-                placeholderTextColor={colors.inputPlaceholder}
-                multiline
-              />
-            </View>
-
-            <Pressable
-              disabled={procesando}
-              style={[
-                styles.btn,
-                styles.btnPrimary,
-                { marginTop: 22, minHeight: 52, backgroundColor: colors.primary },
-                procesando && styles.botonDeshabilitado,
-              ]}
-              onPress={confirmarApertura}
-            >
-              {procesando ? (
-                <ActivityIndicator color={BLANCO} />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={BLANCO} />
-                  <Text style={styles.btnPrimaryText}>CONFIRMAR APERTURA</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal Cierre de Caja */}
-      <Modal
-        visible={modal === "cerrar"}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModal("ninguno")}
-      >
-        <View
-          style={[
-            styles.modalBg,
-            isDark && { backgroundColor: colors.modalBackdrop },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalContainer,
-              isDark && {
-                backgroundColor: colors.modalBg,
-                borderColor: colors.border,
-                borderTopWidth: 1,
-              },
-            ]}
-          >
-            <View style={styles.modalHandle} />
-
-            <View
-              style={[
-                styles.modalHeader,
-                isDark && { borderBottomColor: colors.borderLight },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modalTitle,
-                  isDark && { color: colors.text },
-                ]}
-              >
-                Cierre de Caja
-              </Text>
-              <Pressable
-                style={[
-                  styles.modalCloseBtn,
-                  isDark && { backgroundColor: colors.surfaceElevated },
-                ]}
-                onPress={() => setModal("ninguno")}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={isDark ? colors.textSecondary : "#555"}
-                />
-              </Pressable>
-            </View>
-
-            <View
-              style={[
-                styles.modalSection,
-                isDark && {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modalSectionTitle,
-                  isDark && { color: colors.textSecondary },
-                ]}
-              >
-                Resumen del Arqueo
-              </Text>
-              <View style={styles.modalItemRow}>
-                <Text
-                  style={[
-                    styles.modalItemLabel,
-                    isDark && { color: colors.textSecondary },
-                  ]}
-                >
-                  Total en Efectivo:
-                </Text>
-                <Text
-                  style={[
-                    styles.modalItemValue,
-                    isDark && { color: colors.text },
-                  ]}
-                >
-                  Bs {Number(resumenActual.efectivo ?? 0).toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.modalItemRow}>
-                <Text
-                  style={[
-                    styles.modalItemLabel,
-                    isDark && { color: colors.textSecondary },
-                  ]}
-                >
-                  Total en QR:
-                </Text>
-                <Text
-                  style={[
-                    styles.modalItemValue,
-                    isDark && { color: colors.text },
-                  ]}
-                >
-                  Bs {Number(resumenActual.qr ?? 0).toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.modalItemRow}>
-                <Text
-                  style={[
-                    styles.modalItemLabel,
-                    isDark && { color: colors.textSecondary },
-                  ]}
-                >
-                  Pagos registrados:
-                </Text>
-                <Text
-                  style={[
-                    styles.modalItemValue,
-                    isDark && { color: colors.text },
-                  ]}
-                >
-                  {resumenActual.cantidad}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.totalContainer,
-                isDark && {
-                  backgroundColor: "rgba(200, 35, 27, 0.18)",
-                  borderColor: "rgba(200, 35, 27, 0.35)",
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.totalLabel,
-                  { color: colors.primary },
-                ]}
-              >
-                TOTAL A LIQUIDAR
-              </Text>
-              <Text
-                style={[
-                  styles.totalValue,
-                  { color: colors.primary },
-                ]}
-              >
-                Bs {Number(resumenActual.total ?? 0).toFixed(2)}
-              </Text>
-            </View>
-
-            <Text
-              style={[
-                styles.etiqueta,
-                isDark && { color: colors.textSecondary },
-              ]}
-            >
-              Observación de cierre (Opcional)
-            </Text>
-            <View
-              style={[
-                styles.inputContainer,
-                { minHeight: 80, alignItems: "flex-start", paddingVertical: 10 },
-                isDark && {
-                  backgroundColor: colors.inputBg,
-                  borderColor: colors.inputBorder,
-                },
-              ]}
-            >
-              <TextInput
-                style={[
-                  styles.input,
-                  { height: 60, textAlignVertical: "top" },
-                  isDark && { color: colors.text },
-                ]}
-                value={observacion}
-                onChangeText={setObservacion}
-                placeholder="Ingresa notas o comentarios del cierre..."
-                placeholderTextColor={colors.inputPlaceholder}
-                multiline
-              />
-            </View>
-
-            <Pressable
-              disabled={procesando}
-              style={[
-                styles.btn,
-                styles.btnPrimary,
-                { marginTop: 22, minHeight: 52, backgroundColor: colors.primary },
-                procesando && styles.botonDeshabilitado,
-              ]}
-              onPress={confirmarCierre}
-            >
-              {procesando ? (
-                <ActivityIndicator color={BLANCO} />
-              ) : (
-                <>
-                  <Ionicons name="lock-closed-outline" size={19} color={BLANCO} />
-                  <Text style={styles.btnPrimaryText}>CONFIRMAR Y CERRAR CAJA</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
 
       {/* Modal Detalle Histórico */}
       <Modal

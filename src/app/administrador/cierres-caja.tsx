@@ -15,9 +15,14 @@ import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { usePaginacion } from "../../hooks/usePaginacion";
 import {
+  abrirCajaUsuarioAdmin,
+  abrirTodasCajasAdmin,
   cerrarCajaPorIdAdmin,
+  cerrarCajaUsuarioAdmin,
+  cerrarTodasCajasAdmin,
   listarHistorialCierresAdmin,
   obtenerDetalleCierreAdmin,
+  obtenerEstadoCajasAdmin,
   obtenerResumenCierresAdmin,
 } from "../../services/cierreCajaAdminService";
 import {
@@ -31,6 +36,7 @@ import {
   CierreCajaDetalleAdmin,
   CierreCajaDetalleItemAdmin,
   CierreCajaResumenAdmin,
+  EstadoCajaDistribuidorAdmin,
 } from "../../types/cierreCajaAdmin";
 import { TipoPago } from "../../types/pagoAdmin";
 
@@ -42,18 +48,30 @@ type EstadoFiltro =
   | "Cerrada"
   | "Anulada";
 
+type PestanaCajas = "enVivo" | "historial";
+
 type ModalActivo =
   | "ninguno"
   | "detalle"
   | "editarPago"
   | "anularPago"
   | "cerrarCaja"
+  | "abrirTodas"
+  | "cerrarTodas"
+  | "abrirUsuario"
+  | "cerrarUsuario"
   | "calendarioDesde"
   | "calendarioHasta"
   | "mensaje";
 
 export default function CierresCajaAdministrador() {
   const { colors, isDark } = useAppTheme();
+
+  const [pestanaActiva, setPestanaActiva] = useState<PestanaCajas>("enVivo");
+  const [estadosCajas, setEstadosCajas] = useState<EstadoCajaDistribuidorAdmin[]>([]);
+  const [distribuidorAccion, setDistribuidorAccion] =
+    useState<EstadoCajaDistribuidorAdmin | null>(null);
+  const [busquedaEnVivo, setBusquedaEnVivo] = useState("");
 
   const [cierres, setCierres] = useState<CierreCajaAdmin[]>([]);
   const [resumen, setResumen] = useState<CierreCajaResumenAdmin | null>(null);
@@ -90,13 +108,15 @@ export default function CierresCajaAdministrador() {
     try {
       setCargando(true);
 
-      const [dataCierres, dataResumen] = await Promise.all([
+      const [dataCierres, dataResumen, dataEstados] = await Promise.all([
         listarHistorialCierresAdmin(),
         obtenerResumenCierresAdmin(),
+        obtenerEstadoCajasAdmin().catch(() => []),
       ]);
 
       setCierres(dataCierres);
       setResumen(dataResumen);
+      setEstadosCajas(dataEstados);
     } catch (error) {
       abrirMensaje(
         error instanceof Error
@@ -111,6 +131,128 @@ export default function CierresCajaAdministrador() {
 
   const actualizar = async () => {
     await cargarDatos();
+  };
+
+  const estadosFiltrados = useMemo(() => {
+    const texto = busquedaEnVivo.trim().toLowerCase();
+    if (!texto) return estadosCajas;
+
+    return estadosCajas.filter((item) => {
+      const usuario = (item.usuario || "").toLowerCase();
+      const correo = (
+        item.correo ||
+        item.correoUsuario ||
+        ""
+      ).toLowerCase();
+      const idStr = String(item.idUsuario);
+
+      return (
+        usuario.includes(texto) ||
+        correo.includes(texto) ||
+        idStr.includes(texto)
+      );
+    });
+  }, [estadosCajas, busquedaEnVivo]);
+
+  const {
+    paginaActual: pagEnVivo,
+    setPaginaActual: setPagEnVivo,
+    registrosPorPagina: regPorPagEnVivo,
+    setRegistrosPorPagina: setRegPorPagEnVivo,
+    totalPaginas: totPagEnVivo,
+    totalRegistros: totRegEnVivo,
+    datosPaginados: estadosPaginados,
+  } = usePaginacion(estadosFiltrados);
+
+  const confirmarAbrirTodas = async () => {
+    try {
+      setProcesando(true);
+      const res = await abrirTodasCajasAdmin();
+      setModal("ninguno");
+      await cargarDatos();
+      abrirMensaje(
+        res.message ||
+          "Se abrieron las cajas de todos los distribuidores activos exitosamente."
+      );
+    } catch (error) {
+      abrirMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron abrir las cajas de todos los distribuidores.",
+        true
+      );
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const confirmarCerrarTodas = async () => {
+    try {
+      setProcesando(true);
+      const res = await cerrarTodasCajasAdmin();
+      setModal("ninguno");
+      await cargarDatos();
+      abrirMensaje(
+        res.message || "Se cerraron todas las cajas abiertas activas."
+      );
+    } catch (error) {
+      abrirMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cerrar las cajas.",
+        true
+      );
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const confirmarAbrirUsuario = async () => {
+    if (!distribuidorAccion) return;
+    try {
+      setProcesando(true);
+      const res = await abrirCajaUsuarioAdmin(distribuidorAccion.idUsuario);
+      setModal("ninguno");
+      const nom = distribuidorAccion.usuario;
+      setDistribuidorAccion(null);
+      await cargarDatos();
+      abrirMensaje(
+        res.message || `Caja abierta correctamente para el distribuidor ${nom}.`
+      );
+    } catch (error) {
+      abrirMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo abrir la caja del distribuidor.",
+        true
+      );
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const confirmarCerrarUsuario = async () => {
+    if (!distribuidorAccion) return;
+    try {
+      setProcesando(true);
+      const res = await cerrarCajaUsuarioAdmin(distribuidorAccion.idUsuario);
+      setModal("ninguno");
+      const nom = distribuidorAccion.usuario;
+      setDistribuidorAccion(null);
+      await cargarDatos();
+      abrirMensaje(
+        res.message || `Caja cerrada correctamente para el distribuidor ${nom}.`
+      );
+    } catch (error) {
+      abrirMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cerrar la caja del distribuidor.",
+        true
+      );
+    } finally {
+      setProcesando(false);
+    }
   };
 
   const cierresFiltrados = useMemo(() => {
@@ -327,6 +469,7 @@ export default function CierresCajaAdministrador() {
     setPagoAAnular(null);
     setIdTipoPago("");
     setMontoPago("");
+    setDistribuidorAccion(null);
   };
 
   const limpiarFiltros = () => {
@@ -384,15 +527,488 @@ export default function CierresCajaAdministrador() {
         />
       </View>
 
-      <View
-        style={[
-          styles.tarjeta,
-          isDark && {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
+      {/* Selector de Pestañas: En Vivo vs Historial */}
+      <View style={styles.contenedorPestanas}>
+        <Pressable
+          onPress={() => setPestanaActiva("enVivo")}
+          style={[
+            styles.pestanaBoton,
+            isDark && {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+            pestanaActiva === "enVivo" && styles.pestanaBotonActiva,
+          ]}
+        >
+          <Ionicons
+            name="radio-button-on-outline"
+            size={18}
+            color={
+              pestanaActiva === "enVivo"
+                ? "#ffffff"
+                : isDark
+                ? colors.text
+                : "#444b53"
+            }
+          />
+          <Text
+            style={[
+              styles.pestanaTexto,
+              isDark && { color: colors.text },
+              pestanaActiva === "enVivo" && styles.pestanaTextoActiva,
+            ]}
+          >
+            Estado en Vivo de Cajas
+          </Text>
+          <View
+            style={[
+              styles.badgeContador,
+              isDark && { backgroundColor: colors.surfaceElevated },
+              pestanaActiva === "enVivo" && styles.badgeContadorActivo,
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeContadorTexto,
+                isDark && { color: colors.textSecondary },
+                pestanaActiva === "enVivo" && styles.badgeContadorTextoActivo,
+              ]}
+            >
+              {estadosCajas.length}
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setPestanaActiva("historial")}
+          style={[
+            styles.pestanaBoton,
+            isDark && {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+            pestanaActiva === "historial" && styles.pestanaBotonActiva,
+          ]}
+        >
+          <Ionicons
+            name="time-outline"
+            size={18}
+            color={
+              pestanaActiva === "historial"
+                ? "#ffffff"
+                : isDark
+                ? colors.text
+                : "#444b53"
+            }
+          />
+          <Text
+            style={[
+              styles.pestanaTexto,
+              isDark && { color: colors.text },
+              pestanaActiva === "historial" && styles.pestanaTextoActiva,
+            ]}
+          >
+            Historial de Cierres y Arqueos
+          </Text>
+          <View
+            style={[
+              styles.badgeContador,
+              isDark && { backgroundColor: colors.surfaceElevated },
+              pestanaActiva === "historial" && styles.badgeContadorActivo,
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeContadorTexto,
+                isDark && { color: colors.textSecondary },
+                pestanaActiva === "historial" && styles.badgeContadorTextoActivo,
+              ]}
+            >
+              {cierres.length}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+
+      {pestanaActiva === "enVivo" && (
+        <>
+          {/* Barra de Acciones Globales */}
+          <View
+            style={[
+              styles.barraAccionesMasivas,
+              isDark && {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.infoMasiva}>
+              <View
+                style={[
+                  styles.iconoMasivo,
+                  isDark && { backgroundColor: "rgba(200, 35, 27, 0.22)" },
+                ]}
+              >
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.tituloMasivo,
+                    isDark && { color: colors.text },
+                  ]}
+                >
+                  Control Centralizado de Cajas
+                </Text>
+                <Text
+                  style={[
+                    styles.subtituloMasivo,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Solo el administrador puede abrir o cerrar las cajas de los distribuidores.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.botonesMasivosGrupo}>
+              <Pressable
+                onPress={() => setModal("abrirTodas")}
+                style={styles.botonAbrirTodos}
+              >
+                <Ionicons name="lock-open-outline" size={17} color="#ffffff" />
+                <Text style={styles.botonAbrirTodosTexto}>
+                  Abrir todas las cajas
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setModal("cerrarTodas")}
+                style={styles.botonCerrarTodos}
+              >
+                <Ionicons name="lock-closed-outline" size={17} color="#ffffff" />
+                <Text style={styles.botonCerrarTodosTexto}>
+                  Cerrar todas las cajas
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={actualizar}
+                style={[
+                  styles.botonSecundario,
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={18}
+                  color={isDark ? colors.text : "#1f2329"}
+                />
+                <Text
+                  style={[
+                    styles.botonSecundarioTexto,
+                    isDark && { color: colors.text },
+                  ]}
+                >
+                  Actualizar
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Tarjeta con Tabla de Distribuidores En Vivo */}
+          <View
+            style={[
+              styles.tarjeta,
+              isDark && {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.herramientas,
+                isDark && { borderBottomColor: colors.borderLight },
+              ]}
+            >
+              <View
+                style={[
+                  styles.buscador,
+                  isDark && {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.inputBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color={colors.inputPlaceholder}
+                />
+                <TextInput
+                  value={busquedaEnVivo}
+                  onChangeText={setBusquedaEnVivo}
+                  placeholder="Buscar por distribuidor o correo..."
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={[
+                    styles.inputBusqueda,
+                    isDark && { color: colors.text },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {cargando ? (
+              <View style={styles.vacio}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : estadosFiltrados.length === 0 ? (
+              <View style={styles.vacio}>
+                <Ionicons
+                  name="people-outline"
+                  size={48}
+                  color={colors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.vacioTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  No se encontraron distribuidores.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.tabla}>
+                <View
+                  style={[
+                    styles.filaHead,
+                    isDark && { backgroundColor: colors.surfaceElevated },
+                  ]}
+                >
+                  <Head texto="Distribuidor" estilo={styles.colUsuario} />
+                  <Head texto="Estado Caja" estilo={styles.colEstado} />
+                  <Head texto="Apertura" estilo={styles.colApertura} />
+                  <Head texto="Efectivo" estilo={styles.colEfectivo} />
+                  <Head texto="QR" estilo={styles.colQr} />
+                  <Head texto="Total Recaudado" estilo={styles.colTotal} />
+                  <Head texto="Cobros" estilo={{ width: 80 }} />
+                  <Head texto="Acción" estilo={styles.colAcciones} />
+                </View>
+
+                {estadosPaginados.map((item) => (
+                  <View
+                    key={item.idUsuario}
+                    style={[
+                      styles.fila,
+                      isDark && {
+                        backgroundColor: colors.card,
+                        borderTopColor: colors.borderLight,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.usuarioCelda,
+                        styles.colUsuario,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.avatar,
+                          isDark && { backgroundColor: colors.surfaceElevated },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.avatarTexto,
+                            isDark && { color: colors.text },
+                          ]}
+                        >
+                          {(item.usuario || "D").charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.usuarioNombre,
+                            isDark && { color: colors.text },
+                          ]}
+                        >
+                          {item.usuario || "Distribuidor"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.usuarioCorreo,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          {item.correo || item.correoUsuario || "Sin correo"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.colEstado}>
+                      <EstadoBadge
+                        estado={item.cajaAbierta ? "Abierta" : "Cerrada"}
+                      />
+                    </View>
+
+                    <Text
+                      style={[
+                        styles.celda,
+                        styles.colApertura,
+                        isDark && { color: colors.textSecondary },
+                      ]}
+                    >
+                      {item.fechaApertura
+                        ? formatearFecha(item.fechaApertura)
+                        : "Sin apertura"}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.celda,
+                        styles.colEfectivo,
+                        isDark && { color: colors.text },
+                      ]}
+                    >
+                      Bs {formatearDinero(item.totalEfectivo)}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.celda,
+                        styles.colQr,
+                        isDark && { color: colors.textSecondary },
+                      ]}
+                    >
+                      Bs {formatearDinero(item.totalQR)}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.celda,
+                        styles.colTotal,
+                        { color: colors.primary, fontWeight: "700" },
+                      ]}
+                    >
+                      Bs {formatearDinero(item.totalRecaudado)}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.celda,
+                        { width: 80 },
+                        isDark && { color: colors.textSecondary },
+                      ]}
+                    >
+                      {item.cantidadPagos} cobros
+                    </Text>
+
+                    <View
+                      style={[
+                        styles.accionesCelda,
+                        styles.colAcciones,
+                      ]}
+                    >
+                      {item.cajaAbierta ? (
+                        <Pressable
+                          onPress={() => {
+                            setDistribuidorAccion(item);
+                            setModal("cerrarUsuario");
+                          }}
+                          style={[
+                            styles.botonAccionIndividual,
+                            styles.botonCerrarIndiv,
+                            isDark && {
+                              backgroundColor: "rgba(220, 38, 38, 0.15)",
+                              borderColor: "rgba(220, 38, 38, 0.35)",
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="lock-closed-outline"
+                            size={14}
+                            color={isDark ? "#f87171" : "#b82018"}
+                          />
+                          <Text
+                            style={[
+                              styles.botonCerrarIndivTexto,
+                              isDark && { color: "#f87171" },
+                            ]}
+                          >
+                            Cerrar
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => {
+                            setDistribuidorAccion(item);
+                            setModal("abrirUsuario");
+                          }}
+                          style={[
+                            styles.botonAccionIndividual,
+                            styles.botonAbrirIndiv,
+                            isDark && {
+                              backgroundColor: "rgba(21, 128, 61, 0.15)",
+                              borderColor: "rgba(21, 128, 61, 0.35)",
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="lock-open-outline"
+                            size={14}
+                            color={isDark ? "#4ade80" : "#15803d"}
+                          />
+                          <Text
+                            style={[
+                              styles.botonAbrirIndivTexto,
+                              isDark && { color: "#4ade80" },
+                            ]}
+                          >
+                            Abrir
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                ))}
+
+                <Paginacion
+                  paginaActual={pagEnVivo}
+                  totalPaginas={totPagEnVivo}
+                  totalRegistros={totRegEnVivo}
+                  registrosPorPagina={regPorPagEnVivo}
+                  onCambiarPagina={setPagEnVivo}
+                  onCambiarRegistrosPorPagina={setRegPorPagEnVivo}
+                />
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      {pestanaActiva === "historial" && (
+        <View
+          style={[
+            styles.tarjeta,
+            isDark && {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
         <View
           style={[
             styles.herramientas,
@@ -802,6 +1418,7 @@ export default function CierresCajaAdministrador() {
           </View>
         )}
       </View>
+      )}
 
       {/* Modal Detalle de Cierre de Caja */}
       <Modal
@@ -1503,6 +2120,399 @@ export default function CierresCajaAdministrador() {
         }}
         onCerrar={() => setModal("ninguno")}
       />
+
+      {/* Modal Confirmar Apertura de Todas las Cajas */}
+      <Modal
+        visible={modal === "abrirTodas"}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModal}
+      >
+        <View
+          style={[
+            styles.modalFondo,
+            isDark && { backgroundColor: colors.modalBackdrop },
+          ]}
+        >
+          <View
+            style={[
+              styles.mensajeModal,
+              isDark && {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name="lock-open-outline"
+              size={48}
+              color={isDark ? "#4ade80" : "#15803d"}
+            />
+            <Text
+              style={[
+                styles.mensajeTitulo,
+                isDark && { color: colors.text },
+              ]}
+            >
+              ¿Abrir todas las cajas?
+            </Text>
+            <Text
+              style={[
+                styles.mensajeTexto,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              Esta acción aperturará una sesión de caja para todos los distribuidores activos del sistema, habilitándolos para registrar cobros en sus rutas.
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 12,
+                marginTop: 20,
+                width: "100%",
+              }}
+            >
+              <Pressable
+                onPress={cerrarModal}
+                disabled={procesando}
+                style={[
+                  styles.botonModal,
+                  styles.botonCancelar,
+                  { flex: 1 },
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cancelarTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancelar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={procesando}
+                onPress={confirmarAbrirTodas}
+                style={[
+                  styles.botonModal,
+                  styles.botonConfirmar,
+                  { flex: 1, backgroundColor: "#15803d" },
+                ]}
+              >
+                {procesando ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmarTexto}>Abrir Todas</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Confirmar Cierre de Todas las Cajas */}
+      <Modal
+        visible={modal === "cerrarTodas"}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModal}
+      >
+        <View
+          style={[
+            styles.modalFondo,
+            isDark && { backgroundColor: colors.modalBackdrop },
+          ]}
+        >
+          <View
+            style={[
+              styles.mensajeModal,
+              isDark && {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={48}
+              color={colors.dangerText}
+            />
+            <Text
+              style={[
+                styles.mensajeTitulo,
+                isDark && { color: colors.text },
+              ]}
+            >
+              ¿Cerrar todas las cajas abiertas?
+            </Text>
+            <Text
+              style={[
+                styles.mensajeTexto,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              Esta acción cerrará de forma masiva todas las cajas que se encuentren abiertas en este momento. Los distribuidores no podrán registrar nuevos cobros hasta una nueva apertura.
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 12,
+                marginTop: 20,
+                width: "100%",
+              }}
+            >
+              <Pressable
+                onPress={cerrarModal}
+                disabled={procesando}
+                style={[
+                  styles.botonModal,
+                  styles.botonCancelar,
+                  { flex: 1 },
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cancelarTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancelar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={procesando}
+                onPress={confirmarCerrarTodas}
+                style={[
+                  styles.botonModal,
+                  styles.botonConfirmar,
+                  { flex: 1, backgroundColor: colors.primary },
+                ]}
+              >
+                {procesando ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmarTexto}>Cerrar Todas</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Confirmar Apertura de Caja Individual */}
+      <Modal
+        visible={modal === "abrirUsuario"}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModal}
+      >
+        <View
+          style={[
+            styles.modalFondo,
+            isDark && { backgroundColor: colors.modalBackdrop },
+          ]}
+        >
+          <View
+            style={[
+              styles.mensajeModal,
+              isDark && {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name="lock-open-outline"
+              size={48}
+              color={isDark ? "#4ade80" : "#15803d"}
+            />
+            <Text
+              style={[
+                styles.mensajeTitulo,
+                isDark && { color: colors.text },
+              ]}
+            >
+              Abrir Caja de Distribuidor
+            </Text>
+            <Text
+              style={[
+                styles.mensajeTexto,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              ¿Deseas abrir la caja para{" "}
+              <Text style={{ fontWeight: "800", color: isDark ? colors.text : "#1f2329" }}>
+                {distribuidorAccion?.usuario}
+              </Text>
+              ? Al abrir su caja, podrá registrar cobros y entregas de pedidos.
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 12,
+                marginTop: 20,
+                width: "100%",
+              }}
+            >
+              <Pressable
+                onPress={cerrarModal}
+                disabled={procesando}
+                style={[
+                  styles.botonModal,
+                  styles.botonCancelar,
+                  { flex: 1 },
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cancelarTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancelar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={procesando}
+                onPress={confirmarAbrirUsuario}
+                style={[
+                  styles.botonModal,
+                  styles.botonConfirmar,
+                  { flex: 1, backgroundColor: "#15803d" },
+                ]}
+              >
+                {procesando ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmarTexto}>Abrir Caja</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Confirmar Cierre de Caja Individual */}
+      <Modal
+        visible={modal === "cerrarUsuario"}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModal}
+      >
+        <View
+          style={[
+            styles.modalFondo,
+            isDark && { backgroundColor: colors.modalBackdrop },
+          ]}
+        >
+          <View
+            style={[
+              styles.mensajeModal,
+              isDark && {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={48}
+              color={colors.dangerText}
+            />
+            <Text
+              style={[
+                styles.mensajeTitulo,
+                isDark && { color: colors.text },
+              ]}
+            >
+              Cerrar Caja de Distribuidor
+            </Text>
+            <Text
+              style={[
+                styles.mensajeTexto,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              ¿Deseas cerrar la caja de{" "}
+              <Text style={{ fontWeight: "800", color: isDark ? colors.text : "#1f2329" }}>
+                {distribuidorAccion?.usuario}
+              </Text>
+              ? Total recaudado: Bs{" "}
+              {formatearDinero(distribuidorAccion?.totalRecaudado ?? 0)}. El distribuidor ya no podrá registrar más cobros hasta su próxima apertura.
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 12,
+                marginTop: 20,
+                width: "100%",
+              }}
+            >
+              <Pressable
+                onPress={cerrarModal}
+                disabled={procesando}
+                style={[
+                  styles.botonModal,
+                  styles.botonCancelar,
+                  { flex: 1 },
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cancelarTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancelar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={procesando}
+                onPress={confirmarCerrarUsuario}
+                style={[
+                  styles.botonModal,
+                  styles.botonConfirmar,
+                  { flex: 1, backgroundColor: colors.primary },
+                ]}
+              >
+                {procesando ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmarTexto}>Cerrar Caja</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal Mensaje */}
       <Modal

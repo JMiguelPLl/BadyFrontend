@@ -7,7 +7,9 @@ import {
   CierreCajaDetalleAdmin,
   CierreCajaDetalleItemAdmin,
   CierreCajaResumenAdmin,
+  EstadoCajaDistribuidorAdmin,
   FiltrosCierreCajaAdmin,
+  RespuestaAccionCajaAdmin,
   RespuestaCerrarCajaAdmin,
 } from "../types/cierreCajaAdmin";
 
@@ -348,4 +350,131 @@ export async function cerrarCajaPorIdAdmin(
             )
           : undefined,
   };
+}
+
+function normalizarEstadoCaja(item: any): EstadoCajaDistribuidorAdmin {
+  return {
+    idUsuario: Number(item?.idUsuario ?? item?.IdUsuario ?? 0),
+    usuario: item?.usuario ?? item?.Usuario ?? "",
+    correo:
+      item?.correo ??
+      item?.Correo ??
+      item?.correoUsuario ??
+      item?.CorreoUsuario ??
+      null,
+    correoUsuario:
+      item?.correoUsuario ??
+      item?.CorreoUsuario ??
+      item?.correo ??
+      item?.Correo ??
+      null,
+    cajaAbierta: Boolean(
+      item?.cajaAbierta ??
+        item?.CajaAbierta ??
+        (item?.estado
+          ? String(item.estado).toLowerCase() === "abierta"
+          : false)
+    ),
+    idCierreCaja:
+      item?.idCierreCaja ??
+      item?.IdCierreCaja ??
+      item?.id ??
+      item?.Id ??
+      null,
+    fechaApertura:
+      item?.fechaApertura ??
+      item?.FechaApertura ??
+      null,
+    totalEfectivo: Number(
+      item?.totalEfectivo ??
+        item?.TotalEfectivo ??
+        0
+    ),
+    totalQR: Number(
+      item?.totalQR ??
+        item?.TotalQR ??
+        0
+    ),
+    totalRecaudado: Number(
+      item?.totalRecaudado ??
+        item?.TotalRecaudado ??
+        0
+    ),
+    cantidadPagos: Number(
+      item?.cantidadPagos ??
+        item?.CantidadPagos ??
+        0
+    ),
+  };
+}
+
+export async function obtenerEstadoCajasAdmin(): Promise<
+  EstadoCajaDistribuidorAdmin[]
+> {
+  const response = await fetch(
+    `${API_URL}/CierreCaja/Admin/EstadoCajas`,
+    {
+      method: "GET",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  const resultado =
+    await leer<any[]>(response);
+
+  return Array.isArray(resultado)
+    ? resultado.map(normalizarEstadoCaja)
+    : [];
+}
+
+export async function abrirCajaUsuarioAdmin(
+  idUsuario: number
+): Promise<RespuestaAccionCajaAdmin> {
+  const response = await fetch(
+    `${API_URL}/CierreCaja/Admin/AbrirUsuario/${idUsuario}`,
+    {
+      method: "POST",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  return await leer<RespuestaAccionCajaAdmin>(response);
+}
+
+export async function cerrarCajaUsuarioAdmin(
+  idUsuario: number
+): Promise<RespuestaAccionCajaAdmin> {
+  const response = await fetch(
+    `${API_URL}/CierreCaja/Admin/CerrarUsuario/${idUsuario}`,
+    {
+      method: "POST",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  return await leer<RespuestaAccionCajaAdmin>(response);
+}
+
+export async function abrirTodasCajasAdmin(): Promise<RespuestaAccionCajaAdmin> {
+  const response = await fetch(
+    `${API_URL}/CierreCaja/Admin/AbrirTodos`,
+    {
+      method: "POST",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  return await leer<RespuestaAccionCajaAdmin>(response);
+}
+
+export async function cerrarTodasCajasAdmin(): Promise<RespuestaAccionCajaAdmin> {
+  const response = await fetch(
+    `${API_URL}/CierreCaja/Admin/CerrarTodos`,
+    {
+      method: "POST",
+      headers: await obtenerHeaders(),
+    }
+  );
+
+  return await leer<RespuestaAccionCajaAdmin>(response);
 }

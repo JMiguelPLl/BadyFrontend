@@ -513,4 +513,86 @@ export const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 320,
   },
+
+  // Estilos de Reporte de Métodos de Pago (Efectivo vs QR)
+  barraComparativaContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  barraComparativaTitulo: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 10,
+  },
+  barraComparativaTrack: {
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#e2e8f0",
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  segmentoEfectivo: {
+    height: "100%",
+    backgroundColor: "#16a34a",
+  },
+  segmentoQR: {
+    height: "100%",
+    backgroundColor: "#2563eb",
+  },
+  leyendaComparativa: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  itemLeyenda: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  indicadorColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+  },
+  textoLeyenda: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  badgeMetodoEfectivo: {
+    backgroundColor: "#ecfdf3",
+    borderColor: "#bbf7d0",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  badgeMetodoTextoEfectivo: {
+    color: "#16a34a",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  badgeMetodoQR: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  badgeMetodoTextoQR: {
+    color: "#2563eb",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

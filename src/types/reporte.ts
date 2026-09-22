@@ -1,4 +1,8 @@
-export type PestanaReporte = "ventas" | "cobranzas" | "inventario";
+export type PestanaReporte =
+  | "ventas"
+  | "metodosPago"
+  | "cobranzas"
+  | "inventario";
 
 export type SubPestanaCobranzas = "cobros" | "deudas" | "arqueos";
 
@@ -173,4 +177,45 @@ export interface ProductoRotacionReporte {
 export interface ResultadoReporteInventario {
   kpis: KpisInventario;
   productos: ProductoRotacionReporte[];
+}
+
+// =========================================================
+// REPORTE DE MÉTODOS DE PAGO (EFECTIVO Y QR)
+// =========================================================
+
+export interface ResumenMetodosPago {
+  totalGeneral: number;
+  cantidadPagosTotal: number;
+  totalEfectivo: number;
+  cantidadPagosEfectivo: number;
+  porcentajeEfectivo: number;
+  totalQR: number;
+  cantidadPagosQR: number;
+  porcentajeQR: number;
+}
+
+export interface PagoMetodoReporteItem {
+  idPago: number;
+  idPedido: number;
+  idCliente: number;
+  cliente: string;
+  idSucursal?: number;
+  sucursal?: string;
+  idUsuario?: number;
+  usuario?: string;
+  idTipoPago: number;
+  tipoPago: string;
+  montoPagado: number;
+  fechaPago: string;
+  estadoPago: string;
+}
+
+export interface FiltrosReporteMetodosPago {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  idUsuario?: number;
+  idCliente?: number;
+  metodo?: "Todos" | "Efectivo" | "QR";
+  busqueda?: string;
+  preset?: PresetFecha;
 }

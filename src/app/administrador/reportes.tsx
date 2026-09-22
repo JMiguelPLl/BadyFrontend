@@ -11,7 +11,9 @@ import {
   View
 } from "react-native";
 
+import Paginacion from "../../components/comun/Paginacion";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import { usePaginacion } from "../../hooks/usePaginacion";
 import { obtenerUsuario } from "../../services/authService";
 import {
   cargarDatosConsolidadosReportes,
@@ -22,6 +24,9 @@ import {
   generarHtmlReporte,
   imprimirReporteHtml,
   obtenerRangoPreset,
+  obtenerReportePagosEfectivo,
+  obtenerReportePagosQR,
+  obtenerResumenMetodosPago,
   procesarReporteCobranzas,
   procesarReporteInventario,
   procesarReporteVentas,
@@ -33,10 +38,12 @@ import { Cliente } from "../../types/cliente";
 import { DeudaPedido } from "../../types/pagoAdmin";
 import { Producto } from "../../types/producto";
 import {
+  PagoMetodoReporteItem,
   PestanaReporte,
   PresetFecha,
   ReporteCobranzasFiltros,
   ReporteVentasFiltros,
+  ResumenMetodosPago,
   SubPestanaCobranzas,
 } from "../../types/reporte";
 
@@ -82,6 +89,13 @@ export default function ReportesAdministrador() {
   const [busquedaInventario, setBusquedaInventario] = useState<string>("");
   const [filtroAlertaStock, setFiltroAlertaStock] = useState<string>("Todos");
 
+  // Estados de reporte de métodos de pago (Efectivo y QR)
+  const [resumenMetodos, setResumenMetodos] = useState<ResumenMetodosPago | null>(null);
+  const [pagosMetodos, setPagosMetodos] = useState<PagoMetodoReporteItem[]>([]);
+  const [cargandoMetodos, setCargandoMetodos] = useState<boolean>(false);
+  const [filtroMetodoPago, setFiltroMetodoPago] = useState<"Todos" | "Efectivo" | "QR">("Todos");
+  const [busquedaMetodos, setBusquedaMetodos] = useState<string>("");
+
   // Estados de datos crudos
   const [cargando, setCargando] = useState<boolean>(true);
   const [pedidos, setPedidos] = useState<PedidoAdmin[]>([]);
@@ -94,6 +108,32 @@ export default function ReportesAdministrador() {
     cargarDatos();
   }, []);
 
+  const cargarMetodosPago = async (fInicio?: string, fFin?: string) => {
+    try {
+      setCargandoMetodos(true);
+      const [resumen, pagosEf, pagosQr] = await Promise.all([
+        obtenerResumenMetodosPago(fInicio || undefined, fFin || undefined),
+        obtenerReportePagosEfectivo({
+          fechaDesde: fInicio || undefined,
+          fechaHasta: fFin || undefined,
+        }),
+        obtenerReportePagosQR({
+          fechaDesde: fInicio || undefined,
+          fechaHasta: fFin || undefined,
+        }),
+      ]);
+      setResumenMetodos(resumen);
+      const combinados = [...pagosEf, ...pagosQr].sort(
+        (a, b) => new Date(b.fechaPago).getTime() - new Date(a.fechaPago).getTime()
+      );
+      setPagosMetodos(combinados);
+    } catch (error) {
+      console.error("Error al cargar métodos de pago:", error);
+    } finally {
+      setCargandoMetodos(false);
+    }
+  };
+
   const cargarDatos = async () => {
     try {
       setCargando(true);
@@ -103,6 +143,7 @@ export default function ReportesAdministrador() {
       setCierres(datos.cierres);
       setProductos(datos.productos);
       setClientes(datos.clientes);
+      cargarMetodosPago(fechaInicio, fechaFin);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -114,6 +155,12 @@ export default function ReportesAdministrador() {
       setCargando(false);
     }
   };
+
+  useEffect(() => {
+    if (pestanaActiva === "metodosPago") {
+      cargarMetodosPago(fechaInicio, fechaFin);
+    }
+  }, [pestanaActiva, fechaInicio, fechaFin]);
 
   // Cambio de preset de fechas
   const aplicarPresetFecha = (preset: PresetFecha) => {
@@ -127,7 +174,6 @@ export default function ReportesAdministrador() {
   // PROCESAMIENTO ANALÍTICO
   // =========================================================
 
- 
   const reporteVentas = useMemo(() => {
     const filtros: ReporteVentasFiltros = {
       fechaInicio,
@@ -149,7 +195,6 @@ export default function ReportesAdministrador() {
     busquedaVentas,
   ]);
 
-  
   const reporteCobranzas = useMemo(() => {
     const filtros: ReporteCobranzasFiltros = {
       fechaInicio,
@@ -159,8 +204,6 @@ export default function ReportesAdministrador() {
     return procesarReporteCobranzas(deudas, cierres, filtros);
   }, [deudas, cierres, fechaInicio, fechaFin, busquedaCobranzas]);
 
-
-  
   const reporteInventario = useMemo(() => {
     return procesarReporteInventario(productos, pedidos, fechaInicio, fechaFin);
   }, [productos, pedidos, fechaInicio, fechaFin]);
@@ -180,6 +223,37 @@ export default function ReportesAdministrador() {
       return true;
     });
   }, [reporteInventario, busquedaInventario, filtroAlertaStock]);
+
+  // Filtrado de pagos por método (Efectivo y QR)
+  const pagosMetodosFiltrados = useMemo(() => {
+    const b = busquedaMetodos.trim().toLowerCase();
+    return pagosMetodos.filter((p) => {
+      if (filtroMetodoPago === "Efectivo" && !p.tipoPago.toLowerCase().includes("efectivo")) {
+        return false;
+      }
+      if (filtroMetodoPago === "QR" && !p.tipoPago.toLowerCase().includes("qr")) {
+        return false;
+      }
+      if (b) {
+        const matchCliente = p.cliente?.toLowerCase().includes(b);
+        const matchUsuario = p.usuario?.toLowerCase().includes(b);
+        const matchPedido = String(p.idPedido).includes(b);
+        const matchPago = String(p.idPago).includes(b);
+        if (!matchCliente && !matchUsuario && !matchPedido && !matchPago) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [pagosMetodos, filtroMetodoPago, busquedaMetodos]);
+
+  // Hooks de paginación para todas las tablas
+  const paginacionVentas = usePaginacion(reporteVentas.items, { registrosPorPaginaInicial: 10 });
+  const paginacionCobros = usePaginacion(reporteCobranzas.cobros, { registrosPorPaginaInicial: 10 });
+  const paginacionDeudas = usePaginacion(reporteCobranzas.cuentasPorCobrar, { registrosPorPaginaInicial: 10 });
+  const paginacionArqueos = usePaginacion(reporteCobranzas.arqueos, { registrosPorPaginaInicial: 10 });
+  const paginacionInventario = usePaginacion(productosInventarioFiltrados, { registrosPorPaginaInicial: 10 });
+  const paginacionMetodos = usePaginacion(pagosMetodosFiltrados, { registrosPorPaginaInicial: 10 });
 
   // =========================================================
   // EXPORTACIÓN A EXCEL (.xlsx) Y CSV
@@ -300,6 +374,35 @@ export default function ReportesAdministrador() {
           filas
         );
       }
+    } else if (pestanaActiva === "metodosPago") {
+      const encabezados = [
+        "ID Pago",
+        "ID Pedido",
+        "Fecha y Hora",
+        "Cliente",
+        "Sucursal",
+        "Cobrado Por",
+        "Método Pago",
+        "Monto Cobrado (Bs)",
+        "Estado Pago",
+      ];
+      const filas = pagosMetodosFiltrados.map((p) => [
+        p.idPago,
+        p.idPedido,
+        formatearFechaConHora(p.fechaPago),
+        p.cliente || "-",
+        p.sucursal || "-",
+        p.usuario || "-",
+        p.tipoPago,
+        Number(p.montoPagado.toFixed(2)),
+        p.estadoPago,
+      ]);
+      exportarAExcel(
+        `Reporte_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
+        "Métodos de Pago",
+        encabezados,
+        filas
+      );
     } else {
       // Inventario
       const encabezados = [
@@ -446,6 +549,34 @@ export default function ReportesAdministrador() {
           filas
         );
       }
+    } else if (pestanaActiva === "metodosPago") {
+      const encabezados = [
+        "ID Pago",
+        "ID Pedido",
+        "Fecha y Hora",
+        "Cliente",
+        "Sucursal",
+        "Cobrado Por",
+        "Método Pago",
+        "Monto Cobrado (Bs)",
+        "Estado Pago",
+      ];
+      const filas = pagosMetodosFiltrados.map((p) => [
+        p.idPago,
+        p.idPedido,
+        formatearFechaConHora(p.fechaPago),
+        p.cliente || "-",
+        p.sucursal || "-",
+        p.usuario || "-",
+        p.tipoPago,
+        p.montoPagado.toFixed(2),
+        p.estadoPago,
+      ]);
+      exportarACSV(
+        `Reporte_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
+        encabezados,
+        filas
+      );
     } else {
       // Inventario
       const encabezados = [
@@ -732,6 +863,84 @@ export default function ReportesAdministrador() {
             encabezados,
             filas,
             alineaciones,
+          },
+        ],
+      });
+
+      imprimirReporteHtml(html);
+    } else if (pestanaActiva === "metodosPago") {
+      const encabezados = [
+        "ID",
+        "Pedido",
+        "Fecha / Hora",
+        "Cliente",
+        "Sucursal",
+        "Cobrado Por",
+        "Método",
+        "Monto (Bs)",
+        "Estado",
+      ];
+      const filas = pagosMetodosFiltrados.map((p) => [
+        `#${p.idPago}`,
+        `#${p.idPedido}`,
+        formatearFechaConHora(p.fechaPago),
+        p.cliente || "-",
+        p.sucursal || "-",
+        p.usuario || "-",
+        p.tipoPago,
+        `Bs ${p.montoPagado.toFixed(2)}`,
+        p.estadoPago,
+      ]);
+
+      const html = generarHtmlReporte({
+        tituloReporte: "Reporte de Métodos de Pago (Efectivo vs QR)",
+        subtitulo:
+          "Desglose y auditoría analítica de ingresos recaudados por canales de pago",
+        rangoFechas: rangoTexto,
+        filtrosAplicados: `Método: ${filtroMetodoPago} · Búsqueda: ${busquedaMetodos || "Ninguna"}`,
+        usuarioGenerador: adminActual,
+        kpis: [
+          {
+            titulo: "Total Recaudado",
+            valor: `Bs ${(resumenMetodos?.totalGeneral ?? 0).toFixed(2)}`,
+            subtexto: `${resumenMetodos?.cantidadPagosTotal ?? 0} pagos en total`,
+            color: "#0f172a",
+          },
+          {
+            titulo: "Total Efectivo",
+            valor: `Bs ${(resumenMetodos?.totalEfectivo ?? 0).toFixed(2)}`,
+            subtexto: `${resumenMetodos?.cantidadPagosEfectivo ?? 0} pagos (${(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%)`,
+            color: "#16a34a",
+          },
+          {
+            titulo: "Total Digital QR",
+            valor: `Bs ${(resumenMetodos?.totalQR ?? 0).toFixed(2)}`,
+            subtexto: `${resumenMetodos?.cantidadPagosQR ?? 0} pagos (${(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%)`,
+            color: "#2563eb",
+          },
+          {
+            titulo: "Preferencia Efectivo / QR",
+            valor: `${(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(0)}% / ${(resumenMetodos?.porcentajeQR ?? 0).toFixed(0)}%`,
+            subtexto: "Distribución porcentual",
+            color: "#7c3aed",
+          },
+        ],
+        tablas: [
+          {
+            titulo: `Detalle de Pagos (${pagosMetodosFiltrados.length} registros)`,
+            encabezados,
+            filas,
+            alineaciones: [
+              "center",
+              "center",
+              "center",
+              "left",
+              "left",
+              "left",
+              "center",
+              "right",
+              "center",
+            ],
           },
         ],
       });
@@ -1028,6 +1237,38 @@ export default function ReportesAdministrador() {
             Inventario y Stock 
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[
+            styles.pestanaBoton,
+            pestanaActiva === "metodosPago" && styles.pestanaBotonActivo,
+            isDark &&
+              pestanaActiva === "metodosPago" && {
+                backgroundColor: colors.surface,
+              },
+          ]}
+          onPress={() => setPestanaActiva("metodosPago")}
+        >
+          <Ionicons
+            name="card-outline"
+            size={18}
+            color={
+              pestanaActiva === "metodosPago"
+                ? "#c8231b"
+                : isDark
+                ? colors.textSecondary
+                : "#64748b"
+            }
+          />
+          <Text
+            style={[
+              styles.pestanaTexto,
+              pestanaActiva === "metodosPago" && styles.pestanaTextoActivo,
+            ]}
+          >
+            Métodos de Pago (Efectivo / QR)
+          </Text>
+        </Pressable>
       </View>
 
       {/* Barra de Filtros y Rango de Fechas */}
@@ -1205,6 +1446,66 @@ export default function ReportesAdministrador() {
                 </Picker>
               </View>
             </View>
+          )}
+
+          {/* Filtros específicos de Métodos de Pago */}
+          {pestanaActiva === "metodosPago" && (
+            <>
+              <View style={styles.grupoFiltro}>
+                <Text
+                  style={[
+                    styles.etiquetaFiltro,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Método de Pago
+                </Text>
+                <View
+                  style={[
+                    styles.pickerContainer,
+                    isDark && {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Picker
+                    selectedValue={filtroMetodoPago}
+                    onValueChange={(val) => setFiltroMetodoPago(val as any)}
+                    style={[styles.picker, isDark && { color: colors.text }]}
+                  >
+                    <Picker.Item label="Todos los métodos" value="Todos" />
+                    <Picker.Item label="💵 Solo Efectivo" value="Efectivo" />
+                    <Picker.Item label="📱 Solo QR" value="QR" />
+                  </Picker>
+                </View>
+              </View>
+
+              <View style={[styles.grupoFiltro, { flex: 1, minWidth: 220 }]}>
+                <Text
+                  style={[
+                    styles.etiquetaFiltro,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Buscar en Pagos
+                </Text>
+                <TextInput
+                  style={[
+                    styles.inputFecha,
+                    isDark && {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={busquedaMetodos}
+                  onChangeText={setBusquedaMetodos}
+                  placeholder="Buscar por cliente, chofer o #pedido..."
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            </>
           )}
         </View>
 
@@ -1667,7 +1968,7 @@ export default function ReportesAdministrador() {
                     </Text>
                   </View>
                 ) : (
-                  reporteVentas.items.map((p) => {
+                  paginacionVentas.datosPaginados.map((p) => {
                     const colorBadge =
                       p.estado === "Entregado"
                         ? { bg: "#e9f8ef", text: "#1e874b" }
@@ -1798,6 +2099,14 @@ export default function ReportesAdministrador() {
                     );
                   })
                 )}
+                <Paginacion
+                  paginaActual={paginacionVentas.paginaActual}
+                  totalPaginas={paginacionVentas.totalPaginas}
+                  totalRegistros={paginacionVentas.totalRegistros}
+                  registrosPorPagina={paginacionVentas.registrosPorPagina}
+                  onCambiarPagina={paginacionVentas.setPaginaActual}
+                  onCambiarRegistrosPorPagina={paginacionVentas.setRegistrosPorPagina}
+                />
               </View>
             </>
           )}
@@ -2220,7 +2529,7 @@ export default function ReportesAdministrador() {
                         </Text>
                       </View>
                     ) : (
-                      reporteCobranzas.cobros.map((c) => (
+                      paginacionCobros.datosPaginados.map((c) => (
                         <View
                           key={c.idPago}
                           style={[
@@ -2251,7 +2560,7 @@ export default function ReportesAdministrador() {
                           <Text
                             style={[
                               styles.celdaTexto,
-                              { width: 100 },
+                              { width: 90 },
                               isDark && { color: colors.textSecondary },
                             ]}
                           >
@@ -2267,16 +2576,27 @@ export default function ReportesAdministrador() {
                           >
                             {c.cliente}
                           </Text>
-                          <Text
-                            style={[
-                              styles.celdaTexto,
-                              { flex: 1.5 },
-                              isDark && { color: colors.textMuted },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {c.metodoPago}
-                          </Text>
+                          <View style={{ flex: 1.5, paddingRight: 8 }}>
+                            <Text
+                              style={[
+                                styles.celdaTextoBold,
+                                isDark && { color: colors.text },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {c.metodoPago}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.celdaTexto,
+                                { fontSize: 11 },
+                                isDark && { color: colors.textMuted },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {c.cobradoPor}
+                            </Text>
+                          </View>
                           <Text
                             style={[
                               styles.celdaTextoBold,
@@ -2315,6 +2635,14 @@ export default function ReportesAdministrador() {
                         </View>
                       ))
                     )}
+                    <Paginacion
+                      paginaActual={paginacionCobros.paginaActual}
+                      totalPaginas={paginacionCobros.totalPaginas}
+                      totalRegistros={paginacionCobros.totalRegistros}
+                      registrosPorPagina={paginacionCobros.registrosPorPagina}
+                      onCambiarPagina={paginacionCobros.setPaginaActual}
+                      onCambiarRegistrosPorPagina={paginacionCobros.setRegistrosPorPagina}
+                    />
                   </>
                 )}
 
@@ -2361,7 +2689,7 @@ export default function ReportesAdministrador() {
                           { width: 120, textAlign: "right" },
                         ]}
                       >
-                        Saldo Deuda (Bs)
+                        Deuda Total (Bs)
                       </Text>
                     </View>
 
@@ -2378,11 +2706,11 @@ export default function ReportesAdministrador() {
                             isDark && { color: colors.textSecondary },
                           ]}
                         >
-                          ¡Excelente! No hay clientes con deudas pendientes
+                          ¡Excelente! No hay clientes con saldo deudor pendiente
                         </Text>
                       </View>
                     ) : (
-                      reporteCobranzas.cuentasPorCobrar.map((d) => (
+                      paginacionDeudas.datosPaginados.map((d) => (
                         <View
                           key={d.idCliente}
                           style={[
@@ -2454,6 +2782,14 @@ export default function ReportesAdministrador() {
                         </View>
                       ))
                     )}
+                    <Paginacion
+                      paginaActual={paginacionDeudas.paginaActual}
+                      totalPaginas={paginacionDeudas.totalPaginas}
+                      totalRegistros={paginacionDeudas.totalRegistros}
+                      registrosPorPagina={paginacionDeudas.registrosPorPagina}
+                      onCambiarPagina={paginacionDeudas.setPaginaActual}
+                      onCambiarRegistrosPorPagina={paginacionDeudas.setRegistrosPorPagina}
+                    />
                   </>
                 )}
 
@@ -2529,7 +2865,7 @@ export default function ReportesAdministrador() {
                         </Text>
                       </View>
                     ) : (
-                      reporteCobranzas.arqueos.map((a) => (
+                      paginacionArqueos.datosPaginados.map((a) => (
                         <View
                           key={a.idCierre}
                           style={[
@@ -2580,7 +2916,7 @@ export default function ReportesAdministrador() {
                             style={[
                               styles.celdaTexto,
                               { width: 100, textAlign: "right" },
-                              isDark && { color: colors.textMuted },
+                              isDark && { color: colors.text },
                             ]}
                           >
                             Bs {a.ventasDigital.toFixed(2)}
@@ -2588,18 +2924,15 @@ export default function ReportesAdministrador() {
                           <Text
                             style={[
                               styles.celdaTextoBold,
-                              {
-                                width: 110,
-                                textAlign: "right",
-                                color: "#1e874b",
-                              },
+                              { width: 110, textAlign: "right" },
+                              isDark && { color: colors.text },
                             ]}
                           >
                             Bs {a.totalRecaudado.toFixed(2)}
                           </Text>
                           <View
                             style={{
-                              width: 110,
+                              width: 90,
                               alignItems: "center",
                               justifyContent: "center",
                             }}
@@ -2633,6 +2966,14 @@ export default function ReportesAdministrador() {
                         </View>
                       ))
                     )}
+                    <Paginacion
+                      paginaActual={paginacionArqueos.paginaActual}
+                      totalPaginas={paginacionArqueos.totalPaginas}
+                      totalRegistros={paginacionArqueos.totalRegistros}
+                      registrosPorPagina={paginacionArqueos.registrosPorPagina}
+                      onCambiarPagina={paginacionArqueos.setPaginaActual}
+                      onCambiarRegistrosPorPagina={paginacionArqueos.setRegistrosPorPagina}
+                    />
                   </>
                 )}
               </View>
@@ -3035,7 +3376,7 @@ export default function ReportesAdministrador() {
                     </Text>
                   </View>
                 ) : (
-                  productosInventarioFiltrados.map((p) => {
+                  paginacionInventario.datosPaginados.map((p) => {
                     const badgeSemaforo =
                       p.nivelAlerta === "critico"
                         ? {
@@ -3204,7 +3545,577 @@ export default function ReportesAdministrador() {
                     );
                   })
                 )}
+                <Paginacion
+                  paginaActual={paginacionInventario.paginaActual}
+                  totalPaginas={paginacionInventario.totalPaginas}
+                  totalRegistros={paginacionInventario.totalRegistros}
+                  registrosPorPagina={paginacionInventario.registrosPorPagina}
+                  onCambiarPagina={paginacionInventario.setPaginaActual}
+                  onCambiarRegistrosPorPagina={paginacionInventario.setRegistrosPorPagina}
+                />
               </View>
+            </>
+          )}
+
+          {pestanaActiva === "metodosPago" && (
+            <>
+              {cargandoMetodos ? (
+                <View style={styles.estadoVacio}>
+                  <ActivityIndicator size="large" color="#c8231b" />
+                  <Text
+                    style={[
+                      styles.estadoVacioTexto,
+                      isDark && { color: colors.textSecondary },
+                    ]}
+                  >
+                    Cargando reporte de métodos de pago...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* Tarjetas KPI Métodos de Pago */}
+                  <View style={styles.kpiGrid}>
+                    {/* Recaudación Total */}
+                    <View
+                      style={[
+                        styles.kpiCard,
+                        isDark && {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.kpiCabecera}>
+                        <Text
+                          style={[
+                            styles.kpiTitulo,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          Recaudación Total
+                        </Text>
+                        <View
+                          style={[
+                            styles.kpiIconoContenedor,
+                            { backgroundColor: "rgba(15, 23, 42, 0.08)" },
+                          ]}
+                        >
+                          <Ionicons
+                            name="cash-outline"
+                            size={20}
+                            color={isDark ? colors.text : "#0f172a"}
+                          />
+                        </View>
+                      </View>
+                      <Text
+                        style={[
+                          styles.kpiValor,
+                          isDark && { color: colors.text },
+                        ]}
+                      >
+                        Bs {(resumenMetodos?.totalGeneral ?? 0).toFixed(2)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.kpiSubtexto,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        {resumenMetodos?.cantidadPagosTotal ?? 0} pagos registrados
+                      </Text>
+                    </View>
+
+                    {/* Total Efectivo */}
+                    <View
+                      style={[
+                        styles.kpiCard,
+                        isDark && {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.kpiCabecera}>
+                        <Text
+                          style={[
+                            styles.kpiTitulo,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          Cobrado en Efectivo
+                        </Text>
+                        <View
+                          style={[
+                            styles.kpiIconoContenedor,
+                            { backgroundColor: "rgba(22, 163, 74, 0.12)" },
+                          ]}
+                        >
+                          <Ionicons
+                            name="cash-outline"
+                            size={20}
+                            color="#16a34a"
+                          />
+                        </View>
+                      </View>
+                      <Text style={[styles.kpiValor, { color: "#16a34a" }]}>
+                        Bs {(resumenMetodos?.totalEfectivo ?? 0).toFixed(2)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.kpiSubtexto,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        {resumenMetodos?.cantidadPagosEfectivo ?? 0} pagos (
+                        {(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%)
+                      </Text>
+                    </View>
+
+                    {/* Total QR */}
+                    <View
+                      style={[
+                        styles.kpiCard,
+                        isDark && {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.kpiCabecera}>
+                        <Text
+                          style={[
+                            styles.kpiTitulo,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          Cobrado por QR
+                        </Text>
+                        <View
+                          style={[
+                            styles.kpiIconoContenedor,
+                            { backgroundColor: "rgba(37, 99, 235, 0.12)" },
+                          ]}
+                        >
+                          <Ionicons
+                            name="qr-code-outline"
+                            size={20}
+                            color="#2563eb"
+                          />
+                        </View>
+                      </View>
+                      <Text style={[styles.kpiValor, { color: "#2563eb" }]}>
+                        Bs {(resumenMetodos?.totalQR ?? 0).toFixed(2)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.kpiSubtexto,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        {resumenMetodos?.cantidadPagosQR ?? 0} pagos (
+                        {(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%)
+                      </Text>
+                    </View>
+
+                    {/* Proporción Efectivo / QR */}
+                    <View
+                      style={[
+                        styles.kpiCard,
+                        isDark && {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.kpiCabecera}>
+                        <Text
+                          style={[
+                            styles.kpiTitulo,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          Proporción Efectivo / QR
+                        </Text>
+                        <View
+                          style={[
+                            styles.kpiIconoContenedor,
+                            { backgroundColor: "rgba(124, 58, 237, 0.12)" },
+                          ]}
+                        >
+                          <Ionicons
+                            name="pie-chart-outline"
+                            size={20}
+                            color="#7c3aed"
+                          />
+                        </View>
+                      </View>
+                      <Text style={[styles.kpiValor, { color: "#7c3aed" }]}>
+                        {(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(0)}% /{" "}
+                        {(resumenMetodos?.porcentajeQR ?? 0).toFixed(0)}%
+                      </Text>
+                      <Text
+                        style={[
+                          styles.kpiSubtexto,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        {resumenMetodos?.totalGeneral
+                          ? resumenMetodos.totalEfectivo >= resumenMetodos.totalQR
+                            ? "Predominio de pagos en efectivo"
+                            : "Predominio de pagos digitales QR"
+                          : "Sin transacciones registradas"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Barra Comparativa Visual Efectivo vs QR */}
+                  <View
+                    style={[
+                      styles.barraComparativaContainer,
+                      isDark && {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.barraComparativaTitulo,
+                        isDark && { color: colors.text },
+                      ]}
+                    >
+                      Distribución de Métodos de Pago
+                    </Text>
+                    <View style={styles.barraComparativaTrack}>
+                      <View
+                        style={[
+                          styles.segmentoEfectivo,
+                          {
+                            flex:
+                              resumenMetodos?.totalGeneral &&
+                              resumenMetodos.totalGeneral > 0
+                                ? Math.max(1, resumenMetodos.totalEfectivo)
+                                : 1,
+                          },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.segmentoQR,
+                          {
+                            flex:
+                              resumenMetodos?.totalGeneral &&
+                              resumenMetodos.totalGeneral > 0
+                                ? Math.max(1, resumenMetodos.totalQR)
+                                : 0.001,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.leyendaComparativa}>
+                      <View style={styles.itemLeyenda}>
+                        <View
+                          style={[
+                            styles.indicadorColor,
+                            { backgroundColor: "#16a34a" },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.textoLeyenda,
+                            isDark && { color: colors.text },
+                          ]}
+                        >
+                          Efectivo: Bs{" "}
+                          {(resumenMetodos?.totalEfectivo ?? 0).toFixed(2)} (
+                          {(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%)
+                        </Text>
+                      </View>
+
+                      <View style={styles.itemLeyenda}>
+                        <View
+                          style={[
+                            styles.indicadorColor,
+                            { backgroundColor: "#2563eb" },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.textoLeyenda,
+                            isDark && { color: colors.text },
+                          ]}
+                        >
+                          QR / Digital: Bs{" "}
+                          {(resumenMetodos?.totalQR ?? 0).toFixed(2)} (
+                          {(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%)
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Tabla Detallada de Pagos por Método */}
+                  <View
+                    style={[
+                      styles.tarjetaTabla,
+                      isDark && {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.tablaEncabezado}>
+                      <Text
+                        style={[
+                          styles.tablaTitulo,
+                          isDark && { color: colors.text },
+                        ]}
+                      >
+                        Detalle de Pagos por Método ({pagosMetodosFiltrados.length})
+                      </Text>
+                    </View>
+
+                    <ScrollView horizontal showsHorizontalScrollIndicator>
+                      <View>
+                        {/* Cabecera de la tabla */}
+                        <View
+                          style={[
+                            styles.filaTablaHeader,
+                            isDark && {
+                              backgroundColor: colors.surfaceElevated,
+                              borderBottomColor: colors.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.celdaHeaderTexto,
+                              { width: 70, textAlign: "center" },
+                            ]}
+                          >
+                            ID Pago
+                          </Text>
+                          <Text
+                            style={[
+                              styles.celdaHeaderTexto,
+                              { width: 80, textAlign: "center" },
+                            ]}
+                          >
+                            Pedido
+                          </Text>
+                          <Text
+                            style={[styles.celdaHeaderTexto, { width: 140 }]}
+                          >
+                            Fecha y Hora
+                          </Text>
+                          <Text
+                            style={[styles.celdaHeaderTexto, { width: 180 }]}
+                          >
+                            Cliente
+                          </Text>
+                          <Text
+                            style={[styles.celdaHeaderTexto, { width: 140 }]}
+                          >
+                            Sucursal
+                          </Text>
+                          <Text
+                            style={[styles.celdaHeaderTexto, { width: 150 }]}
+                          >
+                            Cobrado Por
+                          </Text>
+                          <Text
+                            style={[
+                              styles.celdaHeaderTexto,
+                              { width: 120, textAlign: "center" },
+                            ]}
+                          >
+                            Método
+                          </Text>
+                          <Text
+                            style={[
+                              styles.celdaHeaderTexto,
+                              { width: 110, textAlign: "right" },
+                            ]}
+                          >
+                            Monto (Bs)
+                          </Text>
+                          <Text
+                            style={[
+                              styles.celdaHeaderTexto,
+                              { width: 100, textAlign: "center" },
+                            ]}
+                          >
+                            Estado
+                          </Text>
+                        </View>
+
+                        {/* Filas */}
+                        {pagosMetodosFiltrados.length === 0 ? (
+                          <View style={styles.estadoVacio}>
+                            <Ionicons
+                              name="card-outline"
+                              size={40}
+                              color="#94a3b8"
+                            />
+                            <Text
+                              style={[
+                                styles.estadoVacioTexto,
+                                isDark && { color: colors.textSecondary },
+                              ]}
+                            >
+                              No se encontraron pagos con los filtros seleccionados
+                            </Text>
+                          </View>
+                        ) : (
+                          paginacionMetodos.datosPaginados.map(
+                            (item, index) => {
+                              const esQR = item.tipoPago
+                                .toLowerCase()
+                                .includes("qr");
+                              return (
+                                <View
+                                  key={`pago-${item.idPago}-${index}`}
+                                  style={[
+                                    styles.filaTabla,
+                                    isDark && {
+                                      borderBottomColor: colors.borderLight,
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.celdaTextoBold,
+                                      { width: 70, textAlign: "center" },
+                                      isDark && { color: colors.text },
+                                    ]}
+                                  >
+                                    #{item.idPago}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTexto,
+                                      {
+                                        width: 80,
+                                        textAlign: "center",
+                                        color: "#c8231b",
+                                        fontWeight: "700",
+                                      },
+                                    ]}
+                                  >
+                                    #{item.idPedido}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTexto,
+                                      { width: 140 },
+                                      isDark && {
+                                        color: colors.textSecondary,
+                                      },
+                                    ]}
+                                  >
+                                    {formatearFechaConHora(item.fechaPago)}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTextoBold,
+                                      { width: 180 },
+                                      isDark && { color: colors.text },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {item.cliente || "Sin cliente"}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTexto,
+                                      { width: 140 },
+                                      isDark && {
+                                        color: colors.textSecondary,
+                                      },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {item.sucursal || "-"}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTexto,
+                                      { width: 150 },
+                                      isDark && {
+                                        color: colors.textSecondary,
+                                      },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {item.usuario || "Distribuidor"}
+                                  </Text>
+                                  <View
+                                    style={{
+                                      width: 120,
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <View
+                                      style={
+                                        esQR
+                                          ? styles.badgeMetodoQR
+                                          : styles.badgeMetodoEfectivo
+                                      }
+                                    >
+                                      <Text
+                                        style={
+                                          esQR
+                                            ? styles.badgeMetodoTextoQR
+                                            : styles.badgeMetodoTextoEfectivo
+                                        }
+                                      >
+                                        {esQR ? "QR Digital" : "Efectivo"}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.celdaTextoBold,
+                                      {
+                                        width: 110,
+                                        textAlign: "right",
+                                        color: esQR ? "#2563eb" : "#16a34a",
+                                      },
+                                    ]}
+                                  >
+                                    Bs {item.montoPagado.toFixed(2)}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.celdaTexto,
+                                      { width: 100, textAlign: "center" },
+                                      isDark && {
+                                        color: colors.textSecondary,
+                                      },
+                                    ]}
+                                  >
+                                    {item.estadoPago || "Completado"}
+                                  </Text>
+                                </View>
+                              );
+                            }
+                          )
+                        )}
+                      </View>
+                    </ScrollView>
+
+                    {/* Paginación */}
+                    <Paginacion
+                      paginaActual={paginacionMetodos.paginaActual}
+                      totalPaginas={paginacionMetodos.totalPaginas}
+                      totalRegistros={paginacionMetodos.totalRegistros}
+                      registrosPorPagina={paginacionMetodos.registrosPorPagina}
+                      onCambiarPagina={paginacionMetodos.setPaginaActual}
+                      onCambiarRegistrosPorPagina={paginacionMetodos.setRegistrosPorPagina}
+                    />
+                  </View>
+                </>
+              )}
             </>
           )}
         </>
