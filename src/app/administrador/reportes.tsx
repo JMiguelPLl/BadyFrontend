@@ -31,6 +31,7 @@ import {
   procesarReporteInventario,
   procesarReporteVentas,
 } from "../../services/reporteService";
+import { obtenerDetalleCierreAdmin } from "../../services/cierreCajaAdminService";
 import { styles } from "../../styles/administrador/reportes.styles";
 import { PedidoAdmin } from "../../types/asignacionPedido";
 import { CierreCajaAdmin } from "../../types/cierreCajaAdmin";
@@ -84,6 +85,9 @@ export default function ReportesAdministrador() {
 
   // Filtros adicionales de cobranzas
   const [busquedaCobranzas, setBusquedaCobranzas] = useState<string>("");
+  const [filtroMetodoCobranzas, setFiltroMetodoCobranzas] = useState<
+    "Todos" | "Efectivo" | "QR"
+  >("Todos");
 
   // Filtros adicionales de inventario
   const [busquedaInventario, setBusquedaInventario] = useState<string>("");
@@ -123,7 +127,43 @@ export default function ReportesAdministrador() {
         }),
       ]);
       setResumenMetodos(resumen);
-      const combinados = [...pagosEf, ...pagosQr].sort(
+
+      let combinados = [...pagosEf, ...pagosQr];
+
+      // Si los endpoints de reporte de pagos no retornan registros, enriquecemos
+      // consultando el detalle de cierres de caja (que contiene los pagos con tipoPago exacto):
+      if (combinados.length === 0 && cierres.length > 0) {
+        try {
+          const detallesCierres = await Promise.allSettled(
+            cierres.slice(0, 30).map((c) => obtenerDetalleCierreAdmin(c.id))
+          );
+          detallesCierres.forEach((res) => {
+            if (res.status === "fulfilled" && res.value?.pagos) {
+              res.value.pagos.forEach((p) => {
+                combinados.push({
+                  idPago: p.idPago || p.id,
+                  idPedido: p.idPedido,
+                  idCliente: p.idCliente,
+                  cliente: p.cliente,
+                  idSucursal: p.idSucursal,
+                  sucursal: p.sucursal,
+                  idUsuario: undefined,
+                  usuario: undefined,
+                  idTipoPago: p.idTipoPago,
+                  tipoPago: p.tipoPago || (p.idTipoPago === 2 ? "QR" : "Efectivo"),
+                  montoPagado: p.montoPagado,
+                  fechaPago: p.fechaPago,
+                  estadoPago: p.estadoPago,
+                });
+              });
+            }
+          });
+        } catch (e) {
+          console.warn("No se pudieron enriquecer pagos desde cierres:", e);
+        }
+      }
+
+      combinados.sort(
         (a, b) => new Date(b.fechaPago).getTime() - new Date(a.fechaPago).getTime()
       );
       setPagosMetodos(combinados);
@@ -143,6 +183,9 @@ export default function ReportesAdministrador() {
       setCierres(datos.cierres);
       setProductos(datos.productos);
       setClientes(datos.clientes);
+      if (datos.pagosDetallados && datos.pagosDetallados.length > 0) {
+        setPagosMetodos(datos.pagosDetallados);
+      }
       cargarMetodosPago(fechaInicio, fechaFin);
     } catch (error) {
       Alert.alert(
@@ -157,10 +200,8 @@ export default function ReportesAdministrador() {
   };
 
   useEffect(() => {
-    if (pestanaActiva === "metodosPago") {
-      cargarMetodosPago(fechaInicio, fechaFin);
-    }
-  }, [pestanaActiva, fechaInicio, fechaFin]);
+    cargarMetodosPago(fechaInicio, fechaFin);
+  }, [fechaInicio, fechaFin]);
 
   // Cambio de preset de fechas
   const aplicarPresetFecha = (preset: PresetFecha) => {
@@ -199,10 +240,19 @@ export default function ReportesAdministrador() {
     const filtros: ReporteCobranzasFiltros = {
       fechaInicio,
       fechaFin,
+      metodoPago: filtroMetodoCobranzas,
       busqueda: busquedaCobranzas,
     };
-    return procesarReporteCobranzas(deudas, cierres, filtros);
-  }, [deudas, cierres, fechaInicio, fechaFin, busquedaCobranzas]);
+    return procesarReporteCobranzas(deudas, cierres, filtros, pagosMetodos);
+  }, [
+    deudas,
+    cierres,
+    fechaInicio,
+    fechaFin,
+    busquedaCobranzas,
+    filtroMetodoCobranzas,
+    pagosMetodos,
+  ]);
 
   const reporteInventario = useMemo(() => {
     return procesarReporteInventario(productos, pedidos, fechaInicio, fechaFin);
@@ -253,7 +303,6 @@ export default function ReportesAdministrador() {
   const paginacionDeudas = usePaginacion(reporteCobranzas.cuentasPorCobrar, { registrosPorPaginaInicial: 10 });
   const paginacionArqueos = usePaginacion(reporteCobranzas.arqueos, { registrosPorPaginaInicial: 10 });
   const paginacionInventario = usePaginacion(productosInventarioFiltrados, { registrosPorPaginaInicial: 10 });
-  const paginacionMetodos = usePaginacion(pagosMetodosFiltrados, { registrosPorPaginaInicial: 10 });
 
   // =========================================================
   // EXPORTACIÓN A EXCEL (.xlsx) Y CSV
@@ -376,29 +425,53 @@ export default function ReportesAdministrador() {
       }
     } else if (pestanaActiva === "metodosPago") {
       const encabezados = [
-        "ID Pago",
-        "ID Pedido",
-        "Fecha y Hora",
-        "Cliente",
-        "Sucursal",
-        "Cobrado Por",
-        "Método Pago",
-        "Monto Cobrado (Bs)",
-        "Estado Pago",
+        "Canal / Método de Pago",
+        "Total Recaudado (Bs)",
+        "Cantidad de Pagos",
+        "Participación (%)",
+        "Ticket Promedio (Bs)",
       ];
-      const filas = pagosMetodosFiltrados.map((p) => [
-        p.idPago,
-        p.idPedido,
-        formatearFechaConHora(p.fechaPago),
-        p.cliente || "-",
-        p.sucursal || "-",
-        p.usuario || "-",
-        p.tipoPago,
-        Number(p.montoPagado.toFixed(2)),
-        p.estadoPago,
-      ]);
+      const promEfectivo =
+        (resumenMetodos?.cantidadPagosEfectivo ?? 0) > 0
+          ? (resumenMetodos?.totalEfectivo ?? 0) /
+            (resumenMetodos?.cantidadPagosEfectivo ?? 1)
+          : 0;
+      const promQR =
+        (resumenMetodos?.cantidadPagosQR ?? 0) > 0
+          ? (resumenMetodos?.totalQR ?? 0) /
+            (resumenMetodos?.cantidadPagosQR ?? 1)
+          : 0;
+      const promTotal =
+        (resumenMetodos?.cantidadPagosTotal ?? 0) > 0
+          ? (resumenMetodos?.totalGeneral ?? 0) /
+            (resumenMetodos?.cantidadPagosTotal ?? 1)
+          : 0;
+
+      const filas: (string | number)[][] = [
+        [
+          "Efectivo",
+          Number((resumenMetodos?.totalEfectivo ?? 0).toFixed(2)),
+          resumenMetodos?.cantidadPagosEfectivo ?? 0,
+          `${(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%`,
+          Number(promEfectivo.toFixed(2)),
+        ],
+        [
+          "QR Digital",
+          Number((resumenMetodos?.totalQR ?? 0).toFixed(2)),
+          resumenMetodos?.cantidadPagosQR ?? 0,
+          `${(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%`,
+          Number(promQR.toFixed(2)),
+        ],
+        [
+          "TOTAL GENERAL",
+          Number((resumenMetodos?.totalGeneral ?? 0).toFixed(2)),
+          resumenMetodos?.cantidadPagosTotal ?? 0,
+          "100.0%",
+          Number(promTotal.toFixed(2)),
+        ],
+      ];
       exportarAExcel(
-        `Reporte_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
+        `Reporte_Resumen_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
         "Métodos de Pago",
         encabezados,
         filas
@@ -551,29 +624,53 @@ export default function ReportesAdministrador() {
       }
     } else if (pestanaActiva === "metodosPago") {
       const encabezados = [
-        "ID Pago",
-        "ID Pedido",
-        "Fecha y Hora",
-        "Cliente",
-        "Sucursal",
-        "Cobrado Por",
-        "Método Pago",
-        "Monto Cobrado (Bs)",
-        "Estado Pago",
+        "Canal / Método de Pago",
+        "Total Recaudado (Bs)",
+        "Cantidad de Pagos",
+        "Participación (%)",
+        "Ticket Promedio (Bs)",
       ];
-      const filas = pagosMetodosFiltrados.map((p) => [
-        p.idPago,
-        p.idPedido,
-        formatearFechaConHora(p.fechaPago),
-        p.cliente || "-",
-        p.sucursal || "-",
-        p.usuario || "-",
-        p.tipoPago,
-        p.montoPagado.toFixed(2),
-        p.estadoPago,
-      ]);
+      const promEfectivo =
+        (resumenMetodos?.cantidadPagosEfectivo ?? 0) > 0
+          ? (resumenMetodos?.totalEfectivo ?? 0) /
+            (resumenMetodos?.cantidadPagosEfectivo ?? 1)
+          : 0;
+      const promQR =
+        (resumenMetodos?.cantidadPagosQR ?? 0) > 0
+          ? (resumenMetodos?.totalQR ?? 0) /
+            (resumenMetodos?.cantidadPagosQR ?? 1)
+          : 0;
+      const promTotal =
+        (resumenMetodos?.cantidadPagosTotal ?? 0) > 0
+          ? (resumenMetodos?.totalGeneral ?? 0) /
+            (resumenMetodos?.cantidadPagosTotal ?? 1)
+          : 0;
+
+      const filas: (string | number)[][] = [
+        [
+          "Efectivo",
+          (resumenMetodos?.totalEfectivo ?? 0).toFixed(2),
+          resumenMetodos?.cantidadPagosEfectivo ?? 0,
+          `${(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%`,
+          promEfectivo.toFixed(2),
+        ],
+        [
+          "QR Digital",
+          (resumenMetodos?.totalQR ?? 0).toFixed(2),
+          resumenMetodos?.cantidadPagosQR ?? 0,
+          `${(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%`,
+          promQR.toFixed(2),
+        ],
+        [
+          "TOTAL GENERAL",
+          (resumenMetodos?.totalGeneral ?? 0).toFixed(2),
+          resumenMetodos?.cantidadPagosTotal ?? 0,
+          "100.0%",
+          promTotal.toFixed(2),
+        ],
+      ];
       exportarACSV(
-        `Reporte_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
+        `Reporte_Resumen_Metodos_Pago_${fechaInicio || "inicio"}_al_${fechaFin || "fin"}`,
         encabezados,
         filas
       );
@@ -869,35 +966,59 @@ export default function ReportesAdministrador() {
 
       imprimirReporteHtml(html);
     } else if (pestanaActiva === "metodosPago") {
+      const promEfectivo =
+        (resumenMetodos?.cantidadPagosEfectivo ?? 0) > 0
+          ? (resumenMetodos?.totalEfectivo ?? 0) /
+            (resumenMetodos?.cantidadPagosEfectivo ?? 1)
+          : 0;
+      const promQR =
+        (resumenMetodos?.cantidadPagosQR ?? 0) > 0
+          ? (resumenMetodos?.totalQR ?? 0) /
+            (resumenMetodos?.cantidadPagosQR ?? 1)
+          : 0;
+      const promTotal =
+        (resumenMetodos?.cantidadPagosTotal ?? 0) > 0
+          ? (resumenMetodos?.totalGeneral ?? 0) /
+            (resumenMetodos?.cantidadPagosTotal ?? 1)
+          : 0;
+
       const encabezados = [
-        "ID",
-        "Pedido",
-        "Fecha / Hora",
-        "Cliente",
-        "Sucursal",
-        "Cobrado Por",
-        "Método",
-        "Monto (Bs)",
-        "Estado",
+        "Canal / Método de Pago",
+        "Total Recaudado (Bs)",
+        "Cantidad de Pagos",
+        "Participación (%)",
+        "Ticket Promedio (Bs)",
       ];
-      const filas = pagosMetodosFiltrados.map((p) => [
-        `#${p.idPago}`,
-        `#${p.idPedido}`,
-        formatearFechaConHora(p.fechaPago),
-        p.cliente || "-",
-        p.sucursal || "-",
-        p.usuario || "-",
-        p.tipoPago,
-        `Bs ${p.montoPagado.toFixed(2)}`,
-        p.estadoPago,
-      ]);
+      const filas: (string | number)[][] = [
+        [
+          "Efectivo",
+          `Bs ${(resumenMetodos?.totalEfectivo ?? 0).toFixed(2)}`,
+          resumenMetodos?.cantidadPagosEfectivo ?? 0,
+          `${(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%`,
+          `Bs ${promEfectivo.toFixed(2)}`,
+        ],
+        [
+          "QR Digital",
+          `Bs ${(resumenMetodos?.totalQR ?? 0).toFixed(2)}`,
+          resumenMetodos?.cantidadPagosQR ?? 0,
+          `${(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%`,
+          `Bs ${promQR.toFixed(2)}`,
+        ],
+        [
+          "TOTAL GENERAL",
+          `Bs ${(resumenMetodos?.totalGeneral ?? 0).toFixed(2)}`,
+          resumenMetodos?.cantidadPagosTotal ?? 0,
+          "100.0%",
+          `Bs ${promTotal.toFixed(2)}`,
+        ],
+      ];
 
       const html = generarHtmlReporte({
         tituloReporte: "Reporte de Métodos de Pago (Efectivo vs QR)",
         subtitulo:
-          "Desglose y auditoría analítica de ingresos recaudados por canales de pago",
+          "Resumen comparativo y distribución analítica de ingresos recaudados",
         rangoFechas: rangoTexto,
-        filtrosAplicados: `Método: ${filtroMetodoPago} · Búsqueda: ${busquedaMetodos || "Ninguna"}`,
+        filtrosAplicados: `Período: ${rangoTexto}`,
         usuarioGenerador: adminActual,
         kpis: [
           {
@@ -927,20 +1048,10 @@ export default function ReportesAdministrador() {
         ],
         tablas: [
           {
-            titulo: `Detalle de Pagos (${pagosMetodosFiltrados.length} registros)`,
+            titulo: "Distribución de Canales de Cobro",
             encabezados,
             filas,
-            alineaciones: [
-              "center",
-              "center",
-              "center",
-              "left",
-              "left",
-              "left",
-              "center",
-              "right",
-              "center",
-            ],
+            alineaciones: ["left", "right", "center", "center", "right"],
           },
         ],
       });
@@ -1448,8 +1559,8 @@ export default function ReportesAdministrador() {
             </View>
           )}
 
-          {/* Filtros específicos de Métodos de Pago */}
-          {pestanaActiva === "metodosPago" && (
+          {/* Filtros específicos de Cobranzas y Arqueos */}
+          {pestanaActiva === "cobranzas" && (
             <>
               <View style={styles.grupoFiltro}>
                 <Text
@@ -1470,8 +1581,10 @@ export default function ReportesAdministrador() {
                   ]}
                 >
                   <Picker
-                    selectedValue={filtroMetodoPago}
-                    onValueChange={(val) => setFiltroMetodoPago(val as any)}
+                    selectedValue={filtroMetodoCobranzas}
+                    onValueChange={(val) =>
+                      setFiltroMetodoCobranzas(val as "Todos" | "Efectivo" | "QR")
+                    }
                     style={[styles.picker, isDark && { color: colors.text }]}
                   >
                     <Picker.Item label="Todos los métodos" value="Todos" />
@@ -1488,7 +1601,7 @@ export default function ReportesAdministrador() {
                     isDark && { color: colors.textSecondary },
                   ]}
                 >
-                  Buscar en Pagos
+                  Buscar en Cobranzas
                 </Text>
                 <TextInput
                   style={[
@@ -1499,8 +1612,8 @@ export default function ReportesAdministrador() {
                       color: colors.text,
                     },
                   ]}
-                  value={busquedaMetodos}
-                  onChangeText={setBusquedaMetodos}
+                  value={busquedaCobranzas}
+                  onChangeText={setBusquedaCobranzas}
                   placeholder="Buscar por cliente, chofer o #pedido..."
                   placeholderTextColor="#94a3b8"
                 />
@@ -2576,20 +2689,45 @@ export default function ReportesAdministrador() {
                           >
                             {c.cliente}
                           </Text>
-                          <View style={{ flex: 1.5, paddingRight: 8 }}>
-                            <Text
-                              style={[
-                                styles.celdaTextoBold,
-                                isDark && { color: colors.text },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {c.metodoPago}
-                            </Text>
+                          <View style={{ flex: 1.5, paddingRight: 8, justifyContent: "center" }}>
+                            {(() => {
+                              const esQR = (c.metodoPago || "")
+                                .toLowerCase()
+                                .includes("qr");
+                              return (
+                                <View
+                                  style={[
+                                    esQR
+                                      ? styles.badgeMetodoQR
+                                      : styles.badgeMetodoEfectivo,
+                                    {
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    },
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={esQR ? "qr-code" : "cash"}
+                                    size={12}
+                                    color={esQR ? "#2563eb" : "#16a34a"}
+                                  />
+                                  <Text
+                                    style={
+                                      esQR
+                                        ? styles.badgeMetodoTextoQR
+                                        : styles.badgeMetodoTextoEfectivo
+                                    }
+                                  >
+                                    {esQR ? "QR Digital" : "Efectivo"}
+                                  </Text>
+                                </View>
+                              );
+                            })()}
                             <Text
                               style={[
                                 styles.celdaTexto,
-                                { fontSize: 11 },
+                                { fontSize: 11, marginTop: 3 },
                                 isDark && { color: colors.textMuted },
                               ]}
                               numberOfLines={1}
@@ -3853,266 +3991,263 @@ export default function ReportesAdministrador() {
                     </View>
                   </View>
 
-                  {/* Tabla Detallada de Pagos por Método */}
+                  {/* Comparativa Analítica por Canales de Pago */}
+                  {(() => {
+                    const cantEf = resumenMetodos?.cantidadPagosEfectivo ?? 0;
+                    const cantQr = resumenMetodos?.cantidadPagosQR ?? 0;
+                    const promEf =
+                      cantEf > 0
+                        ? (resumenMetodos?.totalEfectivo ?? 0) / cantEf
+                        : 0;
+                    const promQr =
+                      cantQr > 0 ? (resumenMetodos?.totalQR ?? 0) / cantQr : 0;
+
+                    return (
+                      <View style={styles.comparativaCanalesGrid}>
+                        {/* Tarjeta Canal Efectivo */}
+                        <View
+                          style={[
+                            styles.canalCard,
+                            isDark && {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        >
+                          <View style={styles.canalCabecera}>
+                            <Text
+                              style={[
+                                styles.canalTitulo,
+                                { color: "#16a34a" },
+                              ]}
+                            >
+                              💵 Canal Efectivo
+                            </Text>
+                            <View
+                              style={[
+                                styles.badgeMetodoEfectivo,
+                                { flexDirection: "row", alignItems: "center", gap: 4 },
+                              ]}
+                            >
+                              <Ionicons name="cash" size={12} color="#16a34a" />
+                              <Text style={styles.badgeMetodoTextoEfectivo}>
+                                {(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(1)}%
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text
+                            style={[
+                              styles.canalMonto,
+                              { color: "#16a34a" },
+                            ]}
+                          >
+                            Bs {(resumenMetodos?.totalEfectivo ?? 0).toFixed(2)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.canalSubtexto,
+                              isDark && { color: colors.textSecondary },
+                            ]}
+                          >
+                            Cobrado físicamente en mano por distribuidores
+                          </Text>
+
+                          <View
+                            style={[
+                              styles.canalMetricasFila,
+                              isDark && { borderTopColor: colors.borderLight },
+                            ]}
+                          >
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                {cantEf}
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Transacciones
+                              </Text>
+                            </View>
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                Bs {promEf.toFixed(2)}
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Ticket Promedio
+                              </Text>
+                            </View>
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                {(resumenMetodos?.porcentajeEfectivo ?? 0).toFixed(0)}%
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Cuota Recaudación
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Tarjeta Canal QR Digital */}
+                        <View
+                          style={[
+                            styles.canalCard,
+                            isDark && {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        >
+                          <View style={styles.canalCabecera}>
+                            <Text
+                              style={[
+                                styles.canalTitulo,
+                                { color: "#2563eb" },
+                              ]}
+                            >
+                              📱 Canal QR Digital
+                            </Text>
+                            <View
+                              style={[
+                                styles.badgeMetodoQR,
+                                { flexDirection: "row", alignItems: "center", gap: 4 },
+                              ]}
+                            >
+                              <Ionicons name="qr-code" size={12} color="#2563eb" />
+                              <Text style={styles.badgeMetodoTextoQR}>
+                                {(resumenMetodos?.porcentajeQR ?? 0).toFixed(1)}%
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text
+                            style={[
+                              styles.canalMonto,
+                              { color: "#2563eb" },
+                            ]}
+                          >
+                            Bs {(resumenMetodos?.totalQR ?? 0).toFixed(2)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.canalSubtexto,
+                              isDark && { color: colors.textSecondary },
+                            ]}
+                          >
+                            Cobrado electrónicamente mediante código QR
+                          </Text>
+
+                          <View
+                            style={[
+                              styles.canalMetricasFila,
+                              isDark && { borderTopColor: colors.borderLight },
+                            ]}
+                          >
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                {cantQr}
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Transacciones
+                              </Text>
+                            </View>
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                Bs {promQr.toFixed(2)}
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Ticket Promedio
+                              </Text>
+                            </View>
+                            <View style={styles.canalMetricaItem}>
+                              <Text
+                                style={[
+                                  styles.canalMetricaValor,
+                                  isDark && { color: colors.text },
+                                ]}
+                              >
+                                {(resumenMetodos?.porcentajeQR ?? 0).toFixed(0)}%
+                              </Text>
+                              <Text style={styles.canalMetricaEtiqueta}>
+                                Cuota Recaudación
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })()}
+
+                  {/* Banner informativo y enlace directo a Cobranzas */}
                   <View
                     style={[
-                      styles.tarjetaTabla,
+                      styles.bannerAvisoCobros,
                       isDark && {
                         backgroundColor: colors.surface,
                         borderColor: colors.border,
                       },
                     ]}
                   >
-                    <View style={styles.tablaEncabezado}>
+                    <View style={styles.bannerAvisoIcono}>
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={24}
+                        color="#0284c7"
+                      />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 240 }}>
                       <Text
                         style={[
-                          styles.tablaTitulo,
+                          styles.bannerAvisoTitulo,
                           isDark && { color: colors.text },
                         ]}
                       >
-                        Detalle de Pagos por Método ({pagosMetodosFiltrados.length})
+                        Auditoría y Detalle Individual de Cobros
+                      </Text>
+                      <Text
+                        style={[
+                          styles.bannerAvisoTexto,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        El registro detallado de cada pago cobrado a clientes (con cliente, chofer, método Efectivo o QR, estado y fecha exacta) y los arqueos de caja se encuentran centralizados en la sección de Cobranzas y Arqueos.
                       </Text>
                     </View>
-
-                    <ScrollView horizontal showsHorizontalScrollIndicator>
-                      <View>
-                        {/* Cabecera de la tabla */}
-                        <View
-                          style={[
-                            styles.filaTablaHeader,
-                            isDark && {
-                              backgroundColor: colors.surfaceElevated,
-                              borderBottomColor: colors.border,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.celdaHeaderTexto,
-                              { width: 70, textAlign: "center" },
-                            ]}
-                          >
-                            ID Pago
-                          </Text>
-                          <Text
-                            style={[
-                              styles.celdaHeaderTexto,
-                              { width: 80, textAlign: "center" },
-                            ]}
-                          >
-                            Pedido
-                          </Text>
-                          <Text
-                            style={[styles.celdaHeaderTexto, { width: 140 }]}
-                          >
-                            Fecha y Hora
-                          </Text>
-                          <Text
-                            style={[styles.celdaHeaderTexto, { width: 180 }]}
-                          >
-                            Cliente
-                          </Text>
-                          <Text
-                            style={[styles.celdaHeaderTexto, { width: 140 }]}
-                          >
-                            Sucursal
-                          </Text>
-                          <Text
-                            style={[styles.celdaHeaderTexto, { width: 150 }]}
-                          >
-                            Cobrado Por
-                          </Text>
-                          <Text
-                            style={[
-                              styles.celdaHeaderTexto,
-                              { width: 120, textAlign: "center" },
-                            ]}
-                          >
-                            Método
-                          </Text>
-                          <Text
-                            style={[
-                              styles.celdaHeaderTexto,
-                              { width: 110, textAlign: "right" },
-                            ]}
-                          >
-                            Monto (Bs)
-                          </Text>
-                          <Text
-                            style={[
-                              styles.celdaHeaderTexto,
-                              { width: 100, textAlign: "center" },
-                            ]}
-                          >
-                            Estado
-                          </Text>
-                        </View>
-
-                        {/* Filas */}
-                        {pagosMetodosFiltrados.length === 0 ? (
-                          <View style={styles.estadoVacio}>
-                            <Ionicons
-                              name="card-outline"
-                              size={40}
-                              color="#94a3b8"
-                            />
-                            <Text
-                              style={[
-                                styles.estadoVacioTexto,
-                                isDark && { color: colors.textSecondary },
-                              ]}
-                            >
-                              No se encontraron pagos con los filtros seleccionados
-                            </Text>
-                          </View>
-                        ) : (
-                          paginacionMetodos.datosPaginados.map(
-                            (item, index) => {
-                              const esQR = item.tipoPago
-                                .toLowerCase()
-                                .includes("qr");
-                              return (
-                                <View
-                                  key={`pago-${item.idPago}-${index}`}
-                                  style={[
-                                    styles.filaTabla,
-                                    isDark && {
-                                      borderBottomColor: colors.borderLight,
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.celdaTextoBold,
-                                      { width: 70, textAlign: "center" },
-                                      isDark && { color: colors.text },
-                                    ]}
-                                  >
-                                    #{item.idPago}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTexto,
-                                      {
-                                        width: 80,
-                                        textAlign: "center",
-                                        color: "#c8231b",
-                                        fontWeight: "700",
-                                      },
-                                    ]}
-                                  >
-                                    #{item.idPedido}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTexto,
-                                      { width: 140 },
-                                      isDark && {
-                                        color: colors.textSecondary,
-                                      },
-                                    ]}
-                                  >
-                                    {formatearFechaConHora(item.fechaPago)}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTextoBold,
-                                      { width: 180 },
-                                      isDark && { color: colors.text },
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {item.cliente || "Sin cliente"}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTexto,
-                                      { width: 140 },
-                                      isDark && {
-                                        color: colors.textSecondary,
-                                      },
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {item.sucursal || "-"}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTexto,
-                                      { width: 150 },
-                                      isDark && {
-                                        color: colors.textSecondary,
-                                      },
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {item.usuario || "Distribuidor"}
-                                  </Text>
-                                  <View
-                                    style={{
-                                      width: 120,
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <View
-                                      style={
-                                        esQR
-                                          ? styles.badgeMetodoQR
-                                          : styles.badgeMetodoEfectivo
-                                      }
-                                    >
-                                      <Text
-                                        style={
-                                          esQR
-                                            ? styles.badgeMetodoTextoQR
-                                            : styles.badgeMetodoTextoEfectivo
-                                        }
-                                      >
-                                        {esQR ? "QR Digital" : "Efectivo"}
-                                      </Text>
-                                    </View>
-                                  </View>
-                                  <Text
-                                    style={[
-                                      styles.celdaTextoBold,
-                                      {
-                                        width: 110,
-                                        textAlign: "right",
-                                        color: esQR ? "#2563eb" : "#16a34a",
-                                      },
-                                    ]}
-                                  >
-                                    Bs {item.montoPagado.toFixed(2)}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.celdaTexto,
-                                      { width: 100, textAlign: "center" },
-                                      isDark && {
-                                        color: colors.textSecondary,
-                                      },
-                                    ]}
-                                  >
-                                    {item.estadoPago || "Completado"}
-                                  </Text>
-                                </View>
-                              );
-                            }
-                          )
-                        )}
-                      </View>
-                    </ScrollView>
-
-                    {/* Paginación */}
-                    <Paginacion
-                      paginaActual={paginacionMetodos.paginaActual}
-                      totalPaginas={paginacionMetodos.totalPaginas}
-                      totalRegistros={paginacionMetodos.totalRegistros}
-                      registrosPorPagina={paginacionMetodos.registrosPorPagina}
-                      onCambiarPagina={paginacionMetodos.setPaginaActual}
-                      onCambiarRegistrosPorPagina={paginacionMetodos.setRegistrosPorPagina}
-                    />
+                    <Pressable
+                      style={styles.botonIrACobros}
+                      onPress={() => {
+                        setPestanaActiva("cobranzas");
+                        setSubPestanaCobranzas("cobros");
+                      }}
+                    >
+                      <Text style={styles.botonIrACobrosTexto}>
+                        Ver Historial de Cobros
+                      </Text>
+                      <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+                    </Pressable>
                   </View>
                 </>
               )}

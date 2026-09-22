@@ -3,7 +3,10 @@ import { Platform } from "react-native";
 import * as XLSX from "xlsx";
 import { API_URL } from "../constants/api";
 import { listarPedidos } from "./asignacionPedidoService";
-import { listarHistorialCierresAdmin } from "./cierreCajaAdminService";
+import {
+  listarHistorialCierresAdmin,
+  obtenerDetalleCierreAdmin,
+} from "./cierreCajaAdminService";
 import { listarClientes } from "./clienteService";
 import { listarDeudas } from "./pagoAdminService";
 import { listarProductos } from "./productoService";
@@ -336,9 +339,11 @@ export function procesarReporteVentas(
 export function procesarReporteCobranzas(
   deudas: DeudaPedido[],
   cierres: CierreCajaAdmin[],
-  filtros: ReporteCobranzasFiltros
+  filtros: ReporteCobranzasFiltros = {},
+  pagosDetallados: PagoMetodoReporteItem[] = []
 ): ResultadoReporteCobranzas {
   const busqueda = (filtros.busqueda || "").trim().toLowerCase();
+  const metodoFiltro = (filtros.metodoPago || "Todos").trim().toLowerCase();
 
   // 1. Cuentas por Cobrar (Deudores)
   const deudasPendientes = deudas.filter((d) => {
@@ -393,12 +398,54 @@ export function procesarReporteCobranzas(
     (a, b) => b.totalDeuda - a.totalDeuda
   );
 
-  // 2. Historial de Pagos / Cobros registrados
+  // 2. Historial de Pagos / Cobros registrados (con método exacto Efectivo o QR)
   const cobros: CobroItemReporte[] = [];
+  const pedidosConPagoRegistrado = new Set<number>();
   let idContador = 1;
 
+  // Prioridad 1: Procesar pagos detallados (cada uno con su tipoPago real)
+  if (pagosDetallados && pagosDetallados.length > 0) {
+    pagosDetallados.forEach((p) => {
+      const fecha = p.fechaPago;
+      if (!estaEnRangoFecha(fecha, filtros.fechaInicio, filtros.fechaFin)) {
+        return;
+      }
+
+      if (busqueda) {
+        const matchCliente = (p.cliente || "").toLowerCase().includes(busqueda);
+        const matchId = String(p.idPedido).includes(busqueda);
+        const matchPago = String(p.idPago).includes(busqueda);
+        const matchUsuario = (p.usuario || "").toLowerCase().includes(busqueda);
+        if (!matchCliente && !matchId && !matchPago && !matchUsuario) return;
+      }
+
+      const tipo = (p.tipoPago || "").toLowerCase();
+      const esQR = tipo.includes("qr") || tipo.includes("digital");
+      const metodoExacto = esQR ? "QR" : "Efectivo";
+
+      // Filtro de método de pago ("Todos", "Efectivo", "QR")
+      if (metodoFiltro === "efectivo" && esQR) return;
+      if (metodoFiltro === "qr" && !esQR) return;
+
+      pedidosConPagoRegistrado.add(p.idPedido);
+
+      cobros.push({
+        idPago: p.idPago || idContador++,
+        idPedido: p.idPedido,
+        fecha: p.fechaPago,
+        cliente: p.cliente || "Cliente",
+        cobradoPor: p.usuario || "Distribuidor",
+        metodoPago: metodoExacto,
+        monto: p.montoPagado,
+        estado: p.estadoPago || "Completado",
+        observacion: `Cobro de pedido #${p.idPedido}`,
+      });
+    });
+  }
+
+  // Prioridad 2: Pedidos con totalPagado > 0 no incluidos en pagosDetallados
   deudas.forEach((d) => {
-    if (d.totalPagado > 0) {
+    if (d.totalPagado > 0 && !pedidosConPagoRegistrado.has(d.idPedido)) {
       if (
         !estaEnRangoFecha(d.fechaPedido, filtros.fechaInicio, filtros.fechaFin)
       ) {
@@ -411,13 +458,18 @@ export function procesarReporteCobranzas(
         if (!matchCliente && !matchId) return;
       }
 
+      // Por defecto para pedidos en ruta es Efectivo (nunca "Efectivo / QR")
+      const metodoExacto = "Efectivo";
+
+      if (metodoFiltro === "qr") return; // Si se filtró solo QR, este pago en efectivo no entra
+
       cobros.push({
         idPago: idContador++,
         idPedido: d.idPedido,
         fecha: d.fechaPedido,
         cliente: d.cliente,
         cobradoPor: "Sistema de Caja",
-        metodoPago: "Efectivo / QR",
+        metodoPago: metodoExacto,
         monto: d.totalPagado,
         estado: d.saldoPendiente <= 0 ? "Completado" : "Pago Parcial",
         observacion: `Abono de pedido #${d.idPedido}`,
@@ -425,7 +477,12 @@ export function procesarReporteCobranzas(
     }
   });
 
-  // 3. Arqueos de Caja
+  // Ordenar cobros por fecha más reciente
+  cobros.sort(
+    (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+  );
+
+  // 3. Arqueos de Caja con filtro por método de pago
   const arqueosFiltrados = cierres.filter((c) => {
     if (!estaEnRangoFecha(c.fechaCierre || c.fechaApertura, filtros.fechaInicio, filtros.fechaFin)) {
       return false;
@@ -435,6 +492,15 @@ export function procesarReporteCobranzas(
       const matchUsuario = (c.usuario || "").toLowerCase().includes(busqueda);
       const matchId = String(c.id).includes(busqueda);
       if (!matchUsuario && !matchId) return false;
+    }
+
+    // Filtrar arqueos por método solicitado (Efectivo / QR / Todos)
+    if (metodoFiltro === "efectivo" && c.totalEfectivo <= 0) {
+      return false;
+    }
+
+    if (metodoFiltro === "qr" && c.totalQR <= 0) {
+      return false;
     }
 
     return true;
@@ -456,17 +522,25 @@ export function procesarReporteCobranzas(
   // Totales y KPIs
   const totalCobrado = cobros.reduce((acc, c) => acc + c.monto, 0);
   const totalDeudaGlobal = deudas.reduce((acc, d) => acc + d.saldoPendiente, 0);
-  const totalCobradoEfectivo = arqueos.reduce((acc, a) => acc + a.ventasEfectivo, 0);
-  const totalCobradoDigital = arqueos.reduce((acc, a) => acc + a.ventasDigital, 0);
+  const totalCobradoEfectivo = cobros
+    .filter((c) => c.metodoPago === "Efectivo")
+    .reduce((acc, c) => acc + c.monto, 0);
+  const totalCobradoDigital = cobros
+    .filter((c) => c.metodoPago === "QR")
+    .reduce((acc, c) => acc + c.monto, 0);
   const diferenciaNetaArqueos = 0;
 
   const kpis: KpisCobranzas = {
     totalCobrado,
     totalDeudaGlobal,
     totalCobradoEfectivo:
-      totalCobradoEfectivo > 0 ? totalCobradoEfectivo : totalCobrado * 0.65,
+      totalCobradoEfectivo > 0
+        ? totalCobradoEfectivo
+        : arqueos.reduce((acc, a) => acc + a.ventasEfectivo, 0),
     totalCobradoDigital:
-      totalCobradoDigital > 0 ? totalCobradoDigital : totalCobrado * 0.35,
+      totalCobradoDigital > 0
+        ? totalCobradoDigital
+        : arqueos.reduce((acc, a) => acc + a.ventasDigital, 0),
     cantidadPagosRegistrados: cobros.length,
     cantidadArqueosRealizados: arqueos.length,
     diferenciaNetaArqueos,
@@ -598,22 +672,76 @@ export async function cargarDatosConsolidadosReportes(): Promise<{
   cierres: CierreCajaAdmin[];
   productos: Producto[];
   clientes: Cliente[];
+  pagosDetallados: PagoMetodoReporteItem[];
 }> {
-  const [pedidosRes, deudasRes, cierresRes, productosRes, clientesRes] =
-    await Promise.allSettled([
-      listarPedidos(),
-      listarDeudas(),
-      listarHistorialCierresAdmin(),
-      listarProductos(),
-      listarClientes(),
-    ]);
+  const [
+    pedidosRes,
+    deudasRes,
+    cierresRes,
+    productosRes,
+    clientesRes,
+    pagosEfRes,
+    pagosQrRes,
+  ] = await Promise.allSettled([
+    listarPedidos(),
+    listarDeudas(),
+    listarHistorialCierresAdmin(),
+    listarProductos(),
+    listarClientes(),
+    obtenerReportePagosEfectivo(),
+    obtenerReportePagosQR(),
+  ]);
+
+  const pedidos = pedidosRes.status === "fulfilled" ? pedidosRes.value : [];
+  const deudas = deudasRes.status === "fulfilled" ? deudasRes.value : [];
+  const cierres = cierresRes.status === "fulfilled" ? cierresRes.value : [];
+  const productos = productosRes.status === "fulfilled" ? productosRes.value : [];
+  const clientes = clientesRes.status === "fulfilled" ? clientesRes.value : [];
+  const pagosEf = pagosEfRes.status === "fulfilled" ? pagosEfRes.value : [];
+  const pagosQr = pagosQrRes.status === "fulfilled" ? pagosQrRes.value : [];
+
+  let pagosDetallados: PagoMetodoReporteItem[] = [...pagosEf, ...pagosQr];
+
+  // Si los endpoints de reporte de pagos no retornan registros, enriquecemos
+  // automáticamente consultando los detalles de los cierres (que guardan cada pago con tipoPago):
+  if (pagosDetallados.length === 0 && cierres.length > 0) {
+    try {
+      const detallesCierres = await Promise.allSettled(
+        cierres.slice(0, 30).map((c) => obtenerDetalleCierreAdmin(c.id))
+      );
+      detallesCierres.forEach((res) => {
+        if (res.status === "fulfilled" && res.value?.pagos) {
+          res.value.pagos.forEach((p) => {
+            pagosDetallados.push({
+              idPago: p.idPago || p.id,
+              idPedido: p.idPedido,
+              idCliente: p.idCliente,
+              cliente: p.cliente,
+              idSucursal: p.idSucursal,
+              sucursal: p.sucursal,
+              idUsuario: undefined,
+              usuario: undefined,
+              idTipoPago: p.idTipoPago,
+              tipoPago: p.tipoPago || (p.idTipoPago === 2 ? "QR" : "Efectivo"),
+              montoPagado: p.montoPagado,
+              fechaPago: p.fechaPago,
+              estadoPago: p.estadoPago,
+            });
+          });
+        }
+      });
+    } catch (err) {
+      console.warn("No se pudieron enriquecer pagos desde cierres:", err);
+    }
+  }
 
   return {
-    pedidos: pedidosRes.status === "fulfilled" ? pedidosRes.value : [],
-    deudas: deudasRes.status === "fulfilled" ? deudasRes.value : [],
-    cierres: cierresRes.status === "fulfilled" ? cierresRes.value : [],
-    productos: productosRes.status === "fulfilled" ? productosRes.value : [],
-    clientes: clientesRes.status === "fulfilled" ? clientesRes.value : [],
+    pedidos,
+    deudas,
+    cierres,
+    productos,
+    clientes,
+    pagosDetallados,
   };
 }
 
@@ -1210,48 +1338,95 @@ function normalizarPagoReporte(item: any): PagoMetodoReporteItem {
   };
 }
 
+export function extraerArrayPagos(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.$values)) return data.$values;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.resultado)) return data.resultado;
+  if (Array.isArray(data.value)) return data.value;
+  if (Array.isArray(data.pagos)) return data.pagos;
+  if (data.data && Array.isArray(data.data.$values)) return data.data.$values;
+  return [];
+}
+
 export async function obtenerReportePagosEfectivo(
   filtros?: FiltrosReporteMetodosPago
 ): Promise<PagoMetodoReporteItem[]> {
   const params = new URLSearchParams();
-  if (filtros?.fechaDesde) params.append("fechaDesde", filtros.fechaDesde);
-  if (filtros?.fechaHasta) params.append("fechaHasta", filtros.fechaHasta);
+  if (filtros?.fechaDesde) {
+    params.append("fechaDesde", filtros.fechaDesde);
+    params.append("fechaInicio", filtros.fechaDesde);
+  }
+  if (filtros?.fechaHasta) {
+    params.append("fechaHasta", filtros.fechaHasta);
+    params.append("fechaFin", filtros.fechaHasta);
+  }
   if (filtros?.idUsuario) params.append("idUsuario", String(filtros.idUsuario));
   if (filtros?.idCliente) params.append("idCliente", String(filtros.idCliente));
 
   const qs = params.toString();
-  const response = await fetch(
-    `${API_URL}/Pago/Reportes/Efectivo${qs ? `?${qs}` : ""}`,
-    {
-      method: "GET",
-      headers: await obtenerHeaders(),
-    }
-  );
+  try {
+    const response = await fetch(
+      `${API_URL}/Pago/Reportes/Efectivo${qs ? `?${qs}` : ""}`,
+      {
+        method: "GET",
+        headers: await obtenerHeaders(),
+      }
+    );
 
-  const data = await leer<any[]>(response);
-  return Array.isArray(data) ? data.map(normalizarPagoReporte) : [];
+    const data = await leer<any>(response);
+    const arr = extraerArrayPagos(data);
+    return arr.map((item) =>
+      normalizarPagoReporte({
+        ...item,
+        tipoPago: item?.tipoPago || item?.TipoPago || "Efectivo",
+      })
+    );
+  } catch (err) {
+    console.warn("Error en obtenerReportePagosEfectivo:", err);
+    return [];
+  }
 }
 
 export async function obtenerReportePagosQR(
   filtros?: FiltrosReporteMetodosPago
 ): Promise<PagoMetodoReporteItem[]> {
   const params = new URLSearchParams();
-  if (filtros?.fechaDesde) params.append("fechaDesde", filtros.fechaDesde);
-  if (filtros?.fechaHasta) params.append("fechaHasta", filtros.fechaHasta);
+  if (filtros?.fechaDesde) {
+    params.append("fechaDesde", filtros.fechaDesde);
+    params.append("fechaInicio", filtros.fechaDesde);
+  }
+  if (filtros?.fechaHasta) {
+    params.append("fechaHasta", filtros.fechaHasta);
+    params.append("fechaFin", filtros.fechaHasta);
+  }
   if (filtros?.idUsuario) params.append("idUsuario", String(filtros.idUsuario));
   if (filtros?.idCliente) params.append("idCliente", String(filtros.idCliente));
 
   const qs = params.toString();
-  const response = await fetch(
-    `${API_URL}/Pago/Reportes/QR${qs ? `?${qs}` : ""}`,
-    {
-      method: "GET",
-      headers: await obtenerHeaders(),
-    }
-  );
+  try {
+    const response = await fetch(
+      `${API_URL}/Pago/Reportes/QR${qs ? `?${qs}` : ""}`,
+      {
+        method: "GET",
+        headers: await obtenerHeaders(),
+      }
+    );
 
-  const data = await leer<any[]>(response);
-  return Array.isArray(data) ? data.map(normalizarPagoReporte) : [];
+    const data = await leer<any>(response);
+    const arr = extraerArrayPagos(data);
+    return arr.map((item) =>
+      normalizarPagoReporte({
+        ...item,
+        tipoPago: item?.tipoPago || item?.TipoPago || "QR",
+      })
+    );
+  } catch (err) {
+    console.warn("Error en obtenerReportePagosQR:", err);
+    return [];
+  }
 }
 
 export async function obtenerResumenMetodosPago(
@@ -1259,36 +1434,58 @@ export async function obtenerResumenMetodosPago(
   fechaHasta?: string
 ): Promise<ResumenMetodosPago> {
   const params = new URLSearchParams();
-  if (fechaDesde) params.append("fechaDesde", fechaDesde);
-  if (fechaHasta) params.append("fechaHasta", fechaHasta);
+  if (fechaDesde) {
+    params.append("fechaDesde", fechaDesde);
+    params.append("fechaInicio", fechaDesde);
+  }
+  if (fechaHasta) {
+    params.append("fechaHasta", fechaHasta);
+    params.append("fechaFin", fechaHasta);
+  }
 
   const qs = params.toString();
-  const response = await fetch(
-    `${API_URL}/Pago/Reportes/ResumenMetodosPago${qs ? `?${qs}` : ""}`,
-    {
-      method: "GET",
-      headers: await obtenerHeaders(),
-    }
-  );
+  try {
+    const response = await fetch(
+      `${API_URL}/Pago/Reportes/ResumenMetodosPago${qs ? `?${qs}` : ""}`,
+      {
+        method: "GET",
+        headers: await obtenerHeaders(),
+      }
+    );
 
-  const item = await leer<any>(response);
-  return {
-    totalGeneral: Number(item?.totalGeneral ?? item?.TotalGeneral ?? 0),
-    cantidadPagosTotal: Number(
-      item?.cantidadPagosTotal ?? item?.CantidadPagosTotal ?? 0
-    ),
-    totalEfectivo: Number(item?.totalEfectivo ?? item?.TotalEfectivo ?? 0),
-    cantidadPagosEfectivo: Number(
-      item?.cantidadPagosEfectivo ?? item?.CantidadPagosEfectivo ?? 0
-    ),
-    porcentajeEfectivo: Number(
-      item?.porcentajeEfectivo ?? item?.PorcentajeEfectivo ?? 0
-    ),
-    totalQR: Number(item?.totalQR ?? item?.TotalQR ?? 0),
-    cantidadPagosQR: Number(
-      item?.cantidadPagosQR ?? item?.CantidadPagosQR ?? 0
-    ),
-    porcentajeQR: Number(item?.porcentajeQR ?? item?.PorcentajeQR ?? 0),
-  };
+    const itemRaw = await leer<any>(response);
+    const item =
+      itemRaw?.data ?? itemRaw?.resultado ?? itemRaw?.resumen ?? itemRaw;
+    return {
+      totalGeneral: Number(item?.totalGeneral ?? item?.TotalGeneral ?? 0),
+      cantidadPagosTotal: Number(
+        item?.cantidadPagosTotal ?? item?.CantidadPagosTotal ?? 0
+      ),
+      totalEfectivo: Number(item?.totalEfectivo ?? item?.TotalEfectivo ?? 0),
+      cantidadPagosEfectivo: Number(
+        item?.cantidadPagosEfectivo ?? item?.CantidadPagosEfectivo ?? 0
+      ),
+      porcentajeEfectivo: Number(
+        item?.porcentajeEfectivo ?? item?.PorcentajeEfectivo ?? 0
+      ),
+      totalQR: Number(item?.totalQR ?? item?.TotalQR ?? 0),
+      cantidadPagosQR: Number(
+        item?.cantidadPagosQR ?? item?.CantidadPagosQR ?? 0
+      ),
+      porcentajeQR: Number(item?.porcentajeQR ?? item?.PorcentajeQR ?? 0),
+    };
+  } catch (err) {
+    console.warn("Error en obtenerResumenMetodosPago:", err);
+    return {
+      totalGeneral: 0,
+      cantidadPagosTotal: 0,
+      totalEfectivo: 0,
+      cantidadPagosEfectivo: 0,
+      porcentajeEfectivo: 0,
+      totalQR: 0,
+      cantidadPagosQR: 0,
+      porcentajeQR: 0,
+    };
+  }
 }
 
