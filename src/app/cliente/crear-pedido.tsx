@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -101,6 +102,7 @@ type UsuarioSesion = {
 type CantidadesSeleccionadas = Record<number, number>;
 
 export default function CrearPedidoScreen() {
+  const router = useRouter();
   const { colors, isDark } = useAppTheme();
 
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -417,11 +419,33 @@ export default function CrearPedidoScreen() {
       setObservacion("");
       await cargarProductos(true);
 
-      Alert.alert(
-        "Pedido creado",
+      const mensajeExito =
         respuesta?.message ??
-          "Tu pedido fue registrado exitosamente y está pendiente de atención."
-      );
+        "Tu pedido fue registrado exitosamente y está pendiente de atención.";
+
+      if (Platform.OS === "web") {
+        window.alert(`Pedido creado\n\n${mensajeExito}`);
+        router.replace("/cliente/pedidos");
+      } else {
+        Alert.alert(
+          "Pedido creado",
+          mensajeExito,
+          [
+            {
+              text: "Ver mis pedidos",
+              onPress: () => {
+                router.replace("/cliente/pedidos");
+              },
+            },
+          ],
+          {
+            cancelable: false,
+            onDismiss: () => {
+              router.replace("/cliente/pedidos");
+            },
+          }
+        );
+      }
     } catch (error) {
       Alert.alert(
         "No se pudo crear el pedido",

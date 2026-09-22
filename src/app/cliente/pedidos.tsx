@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -129,9 +129,11 @@ export default function PedidosClienteScreen() {
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    iniciarPantalla();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      iniciarPantalla();
+    }, [])
+  );
 
   const iniciarPantalla = async () => {
     try {
