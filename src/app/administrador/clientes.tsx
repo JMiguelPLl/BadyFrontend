@@ -32,6 +32,7 @@ const formularioInicial: ClienteFormulario = {
   numero: "",
   email: "",
   contrasena: "",
+  tieneAccesoApp: false,
 };
 
 type TipoModalActivo =
@@ -42,6 +43,7 @@ type TipoModalActivo =
 
 type TipoMensaje = "exito" | "error";
 type FiltroEstado = "Todos" | "Activo" | "Inactivo";
+type FiltroAcceso = "Todos" | "ConApp" | "Presencial";
 
 export default function ClientesAdministrador() {
   const { colors, isDark } = useAppTheme();
@@ -49,6 +51,7 @@ export default function ClientesAdministrador() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>("Todos");
+  const [filtroAcceso, setFiltroAcceso] = useState<FiltroAcceso>("Todos");
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [procesando, setProcesando] = useState(false);
@@ -101,24 +104,33 @@ export default function ClientesAdministrador() {
   const clientesFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
 
-    if (!texto) {
-      return clientes;
-    }
-
     return clientes.filter((cliente) => {
+      if (filtroAcceso === "ConApp" && !cliente.tieneAccesoApp) {
+        return false;
+      }
+      if (filtroAcceso === "Presencial" && cliente.tieneAccesoApp) {
+        return false;
+      }
+
+      if (!texto) {
+        return true;
+      }
+
       const nombre = cliente.nombre?.toLowerCase() ?? "";
       const email = cliente.email?.toLowerCase() ?? "";
       const numero = cliente.numero?.toLowerCase() ?? "";
       const estado = cliente.estado?.toLowerCase() ?? "";
+      const tipo = cliente.tieneAccesoApp ? "app movil móvil" : "presencial mostrador";
 
       return (
         nombre.includes(texto) ||
         email.includes(texto) ||
         numero.includes(texto) ||
-        estado.includes(texto)
+        estado.includes(texto) ||
+        tipo.includes(texto)
       );
     });
-  }, [clientes, busqueda]);
+  }, [clientes, busqueda, filtroAcceso]);
 
   const {
     paginaActual,
@@ -130,9 +142,12 @@ export default function ClientesAdministrador() {
     datosPaginados: clientesPaginados,
   } = usePaginacion(clientesFiltrados);
 
-  const abrirAgregar = () => {
+  const abrirAgregar = (conApp = false) => {
     setClienteSeleccionado(null);
-    setFormulario(formularioInicial);
+    setFormulario({
+      ...formularioInicial,
+      tieneAccesoApp: conApp,
+    });
     setErrores({});
     setModalActivo("formulario");
   };
@@ -142,8 +157,9 @@ export default function ClientesAdministrador() {
     setFormulario({
       nombre: cliente.nombre,
       numero: cliente.numero,
-      email: cliente.email,
+      email: cliente.email || "",
       contrasena: "",
+      tieneAccesoApp: Boolean(cliente.tieneAccesoApp),
     });
     setErrores({});
     setModalActivo("formulario");
@@ -164,7 +180,7 @@ export default function ClientesAdministrador() {
 
   const actualizarCampo = (
     campo: keyof ClienteFormulario,
-    valor: string
+    valor: any
   ) => {
     setFormulario((prev) => ({
       ...prev,
@@ -190,28 +206,34 @@ export default function ClientesAdministrador() {
     if (!formulario.numero.trim()) {
       nuevosErrores.numero = "El número es obligatorio.";
     } else if (!/^[0-9+ -]{7,15}$/.test(formulario.numero.trim())) {
-      nuevosErrores.numero = "Ingresa un número de teléfono válido.";
+      nuevosErrores.numero = "Ingresa un número de teléfono válido (7 a 15 dígitos).";
     }
 
-    if (!formulario.email.trim()) {
-      nuevosErrores.email = "El correo es obligatorio.";
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formulario.email.trim())
-    ) {
-      nuevosErrores.email = "Ingresa un correo electrónico válido.";
-    }
+    if (formulario.tieneAccesoApp) {
+      if (!formulario.email || !formulario.email.trim()) {
+        nuevosErrores.email = "El correo es obligatorio para clientes con app.";
+      } else if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formulario.email.trim())
+      ) {
+        nuevosErrores.email = "Ingresa un correo electrónico válido.";
+      }
 
-    if (!clienteSeleccionado) {
-      if (!formulario.contrasena.trim()) {
-        nuevosErrores.contrasena = "La contraseña es obligatoria.";
-      } else if (formulario.contrasena.trim().length < 6) {
+      const requiereContrasena =
+        !clienteSeleccionado || !clienteSeleccionado.tieneAccesoApp;
+
+      if (requiereContrasena) {
+        if (!formulario.contrasena || !formulario.contrasena.trim()) {
+          nuevosErrores.contrasena = "La contraseña es obligatoria para acceder a la app.";
+        } else if (formulario.contrasena.trim().length < 6) {
+          nuevosErrores.contrasena = "Debe tener al menos 6 caracteres.";
+        }
+      } else if (
+        formulario.contrasena &&
+        formulario.contrasena.trim().length > 0 &&
+        formulario.contrasena.trim().length < 6
+      ) {
         nuevosErrores.contrasena = "Debe tener al menos 6 caracteres.";
       }
-    } else if (
-      formulario.contrasena.trim().length > 0 &&
-      formulario.contrasena.trim().length < 6
-    ) {
-      nuevosErrores.contrasena = "Debe tener al menos 6 caracteres.";
     }
 
     setErrores(nuevosErrores);
@@ -227,8 +249,15 @@ export default function ClientesAdministrador() {
       const payload: ClienteFormulario = {
         nombre: formulario.nombre.trim(),
         numero: formulario.numero.trim(),
-        email: formulario.email.trim(),
-        contrasena: formulario.contrasena.trim(),
+        tieneAccesoApp: Boolean(formulario.tieneAccesoApp),
+        email:
+          formulario.tieneAccesoApp && formulario.email?.trim()
+            ? formulario.email.trim()
+            : undefined,
+        contrasena:
+          formulario.tieneAccesoApp && formulario.contrasena?.trim()
+            ? formulario.contrasena.trim()
+            : undefined,
       };
 
       if (clienteSeleccionado) {
@@ -240,7 +269,12 @@ export default function ClientesAdministrador() {
         await crearCliente(payload);
         await cargarClientes();
         cerrarModal();
-        mostrarMensaje("Cliente registrado correctamente.", "exito");
+        mostrarMensaje(
+          formulario.tieneAccesoApp
+            ? "Cliente con acceso a la app móvil registrado correctamente."
+            : "Cliente presencial registrado correctamente con sucursal de mostrador.",
+          "exito"
+        );
       }
     } catch (error) {
       mostrarMensaje(
@@ -297,6 +331,14 @@ export default function ClientesAdministrador() {
     (cliente) => cliente.estado === "Inactivo"
   ).length;
 
+  const totalConApp = clientes.filter(
+    (cliente) => Boolean(cliente.tieneAccesoApp)
+  ).length;
+
+  const totalPresenciales = clientes.filter(
+    (cliente) => !cliente.tieneAccesoApp
+  ).length;
+
   return (
     <ScrollView
       style={[
@@ -321,12 +363,12 @@ export default function ClientesAdministrador() {
               isDark && { color: colors.textSecondary },
             ]}
           >
-            Administra los clientes registrados en el sistema.
+            Administra clientes de mostrador y clientes con acceso a la app móvil.
           </Text>
         </View>
 
         <Pressable
-          onPress={abrirAgregar}
+          onPress={() => abrirAgregar(false)}
           style={({ pressed }) => [
             styles.botonAgregar,
             { backgroundColor: colors.primary },
@@ -377,6 +419,90 @@ export default function ClientesAdministrador() {
               ]}
             >
               Total de clientes
+            </Text>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.tarjetaResumen,
+            isDark && {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.iconoAppResumen,
+              isDark && { backgroundColor: "rgba(37, 99, 235, 0.22)" },
+            ]}
+          >
+            <Ionicons
+              name="phone-portrait-outline"
+              size={22}
+              color={isDark ? "#93c5fd" : "#2563eb"}
+            />
+          </View>
+
+          <View>
+            <Text
+              style={[
+                styles.valorResumen,
+                isDark && { color: colors.text },
+              ]}
+            >
+              {totalConApp}
+            </Text>
+            <Text
+              style={[
+                styles.etiquetaResumen,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              Con Acceso App
+            </Text>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.tarjetaResumen,
+            isDark && {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.iconoPresencialResumen,
+              isDark && { backgroundColor: "rgba(100, 116, 139, 0.22)" },
+            ]}
+          >
+            <Ionicons
+              name="storefront-outline"
+              size={22}
+              color={isDark ? "#cbd5e1" : "#475569"}
+            />
+          </View>
+
+          <View>
+            <Text
+              style={[
+                styles.valorResumen,
+                isDark && { color: colors.text },
+              ]}
+            >
+              {totalPresenciales}
+            </Text>
+            <Text
+              style={[
+                styles.etiquetaResumen,
+                isDark && { color: colors.textSecondary },
+              ]}
+            >
+              Presencial / Mostrador
             </Text>
           </View>
         </View>
@@ -498,7 +624,7 @@ export default function ClientesAdministrador() {
             <TextInput
               value={busqueda}
               onChangeText={setBusqueda}
-              placeholder="Buscar cliente por nombre, correo o teléfono..."
+              placeholder="Buscar por nombre, correo, teléfono o tipo..."
               placeholderTextColor={colors.inputPlaceholder}
               style={[
                 styles.inputBusqueda,
@@ -514,6 +640,145 @@ export default function ClientesAdministrador() {
                 />
               </Pressable>
             ) : null}
+          </View>
+
+          {/* Selector de pestañas por Tipo de Acceso */}
+          <View style={styles.pestanasTipo}>
+            <Pressable
+              onPress={() => setFiltroAcceso("Todos")}
+              style={[
+                styles.pestanaTipoBoton,
+                filtroAcceso === "Todos" && styles.pestanaTipoBotonActiva,
+                isDark &&
+                  filtroAcceso !== "Todos" && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pestanaTipoTexto,
+                  filtroAcceso === "Todos" && styles.pestanaTipoTextoActiva,
+                  isDark &&
+                    filtroAcceso !== "Todos" && { color: colors.text },
+                ]}
+              >
+                Todos
+              </Text>
+              <View
+                style={[
+                  styles.pestanaTipoBadge,
+                  filtroAcceso === "Todos" && styles.pestanaTipoBadgeActiva,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.pestanaTipoBadgeTexto,
+                    filtroAcceso === "Todos" &&
+                      styles.pestanaTipoBadgeTextoActiva,
+                  ]}
+                >
+                  {clientes.length}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setFiltroAcceso("ConApp")}
+              style={[
+                styles.pestanaTipoBoton,
+                filtroAcceso === "ConApp" && {
+                  backgroundColor: "#2563eb",
+                  borderColor: "#2563eb",
+                },
+                isDark &&
+                  filtroAcceso !== "ConApp" && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+              ]}
+            >
+              <Ionicons
+                name="phone-portrait-outline"
+                size={14}
+                color={filtroAcceso === "ConApp" ? "#ffffff" : "#2563eb"}
+              />
+              <Text
+                style={[
+                  styles.pestanaTipoTexto,
+                  filtroAcceso === "ConApp" && styles.pestanaTipoTextoActiva,
+                  isDark &&
+                    filtroAcceso !== "ConApp" && { color: colors.text },
+                ]}
+              >
+                Con App
+              </Text>
+              <View
+                style={[
+                  styles.pestanaTipoBadge,
+                  filtroAcceso === "ConApp" && styles.pestanaTipoBadgeActiva,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.pestanaTipoBadgeTexto,
+                    filtroAcceso === "ConApp" &&
+                      styles.pestanaTipoBadgeTextoActiva,
+                  ]}
+                >
+                  {totalConApp}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setFiltroAcceso("Presencial")}
+              style={[
+                styles.pestanaTipoBoton,
+                filtroAcceso === "Presencial" && {
+                  backgroundColor: "#475569",
+                  borderColor: "#475569",
+                },
+                isDark &&
+                  filtroAcceso !== "Presencial" && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+              ]}
+            >
+              <Ionicons
+                name="storefront-outline"
+                size={14}
+                color={filtroAcceso === "Presencial" ? "#ffffff" : "#64748b"}
+              />
+              <Text
+                style={[
+                  styles.pestanaTipoTexto,
+                  filtroAcceso === "Presencial" && styles.pestanaTipoTextoActiva,
+                  isDark &&
+                    filtroAcceso !== "Presencial" && { color: colors.text },
+                ]}
+              >
+                Presencial
+              </Text>
+              <View
+                style={[
+                  styles.pestanaTipoBadge,
+                  filtroAcceso === "Presencial" && styles.pestanaTipoBadgeActiva,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.pestanaTipoBadgeTexto,
+                    filtroAcceso === "Presencial" &&
+                      styles.pestanaTipoBadgeTextoActiva,
+                  ]}
+                >
+                  {totalPresenciales}
+                </Text>
+              </View>
+            </Pressable>
           </View>
 
           <View style={styles.contenedorBotonesHerramientas}>
@@ -705,6 +970,15 @@ export default function ClientesAdministrador() {
               <Text
                 style={[
                   styles.celdaEncabezado,
+                  styles.columnaTipo,
+                  isDark && { color: colors.textSecondary },
+                ]}
+              >
+                Tipo
+              </Text>
+              <Text
+                style={[
+                  styles.celdaEncabezado,
                   styles.columnaCorreo,
                   isDark && { color: colors.textSecondary },
                 ]}
@@ -795,6 +1069,64 @@ export default function ClientesAdministrador() {
                     </Text>
                   </View>
 
+                  <View
+                    style={[
+                      styles.celda,
+                      styles.columnaTipo,
+                      { justifyContent: "center" },
+                    ]}
+                  >
+                    {cliente.tieneAccesoApp ? (
+                      <View
+                        style={[
+                          styles.badgeAppMovil,
+                          isDark && {
+                            backgroundColor: "rgba(37, 99, 235, 0.22)",
+                            borderColor: "rgba(37, 99, 235, 0.4)",
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name="phone-portrait-outline"
+                          size={12}
+                          color={isDark ? "#93c5fd" : "#1d4ed8"}
+                        />
+                        <Text
+                          style={[
+                            styles.badgeAppMovilTexto,
+                            isDark && { color: "#93c5fd" },
+                          ]}
+                        >
+                          App Móvil
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.badgePresencial,
+                          isDark && {
+                            backgroundColor: "rgba(100, 116, 139, 0.22)",
+                            borderColor: "rgba(100, 116, 139, 0.4)",
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name="storefront-outline"
+                          size={12}
+                          color={isDark ? "#cbd5e1" : "#475569"}
+                        />
+                        <Text
+                          style={[
+                            styles.badgePresencialTexto,
+                            isDark && { color: "#cbd5e1" },
+                          ]}
+                        >
+                          Presencial
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
                   <Text
                     style={[
                       styles.celda,
@@ -803,7 +1135,13 @@ export default function ClientesAdministrador() {
                     ]}
                     numberOfLines={1}
                   >
-                    {cliente.email}
+                    {cliente.email ? (
+                      cliente.email
+                    ) : (
+                      <Text style={styles.correoPresencialTexto}>
+                        Sin cuenta móvil
+                      </Text>
+                    )}
                   </Text>
 
                   <Text
@@ -953,6 +1291,148 @@ export default function ClientesAdministrador() {
         onConfirmar={guardarCliente}
       >
         <View style={styles.formulario}>
+          {/* Selector de tipo de cliente */}
+          <View style={styles.tipoClienteSelector}>
+            <Pressable
+              onPress={() => {
+                actualizarCampo("tieneAccesoApp", false);
+                setErrores((prev) => {
+                  const copia = { ...prev };
+                  delete copia.email;
+                  delete copia.contrasena;
+                  return copia;
+                });
+              }}
+              style={[
+                styles.tipoClienteOpcion,
+                !formulario.tieneAccesoApp && styles.tipoClienteOpcionActiva,
+                isDark && {
+                  backgroundColor: !formulario.tieneAccesoApp
+                    ? "rgba(100, 116, 139, 0.22)"
+                    : colors.card,
+                  borderColor: !formulario.tieneAccesoApp
+                    ? "#94a3b8"
+                    : colors.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="storefront-outline"
+                size={22}
+                color={
+                  !formulario.tieneAccesoApp
+                    ? isDark
+                      ? "#cbd5e1"
+                      : "#475569"
+                    : colors.textSecondary
+                }
+              />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.tipoClienteTitulo,
+                    isDark && { color: colors.text },
+                    !formulario.tieneAccesoApp && {
+                      color: isDark ? "#f1f5f9" : "#1e293b",
+                      fontWeight: "900",
+                    },
+                  ]}
+                >
+                  🏢 Cliente Presencial / Mostrador
+                </Text>
+                <Text
+                  style={[
+                    styles.tipoClienteSubtitulo,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Venta directa en tienda. Solo requiere Nombre y Teléfono.
+                </Text>
+              </View>
+              {!formulario.tieneAccesoApp && (
+                <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => actualizarCampo("tieneAccesoApp", true)}
+              style={[
+                styles.tipoClienteOpcion,
+                formulario.tieneAccesoApp && styles.tipoClienteOpcionActiva,
+                isDark && {
+                  backgroundColor: formulario.tieneAccesoApp
+                    ? "rgba(37, 99, 235, 0.22)"
+                    : colors.card,
+                  borderColor: formulario.tieneAccesoApp
+                    ? "#3b82f6"
+                    : colors.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="phone-portrait-outline"
+                size={22}
+                color={
+                  formulario.tieneAccesoApp
+                    ? "#2563eb"
+                    : colors.textSecondary
+                }
+              />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.tipoClienteTitulo,
+                    isDark && { color: colors.text },
+                    formulario.tieneAccesoApp && {
+                      color: "#2563eb",
+                      fontWeight: "900",
+                    },
+                  ]}
+                >
+                  📱 Con Acceso a App Móvil
+                </Text>
+                <Text
+                  style={[
+                    styles.tipoClienteSubtitulo,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Podrá iniciar sesión en su celular para hacer pedidos.
+                </Text>
+              </View>
+              {formulario.tieneAccesoApp && (
+                <Ionicons name="checkmark-circle" size={20} color="#2563eb" />
+              )}
+            </Pressable>
+          </View>
+
+          {!formulario.tieneAccesoApp && (
+            <View
+              style={[
+                styles.bannerInfoPresencial,
+                isDark && {
+                  backgroundColor: "rgba(100, 116, 139, 0.15)",
+                  borderColor: "rgba(100, 116, 139, 0.3)",
+                },
+              ]}
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={20}
+                color={isDark ? "#94a3b8" : "#475569"}
+              />
+              <Text
+                style={[
+                  styles.bannerInfoPresencialTexto,
+                  isDark && { color: "#cbd5e1" },
+                ]}
+              >
+                Al registrar este cliente como presencial, se le creará automáticamente una sucursal interna de mostrador (&quot;Principal / Mostrador&quot;) para que puedas facturarle y crearle pedidos de inmediato.
+              </Text>
+            </View>
+          )}
+
+          {/* Nombre completo */}
           <View style={styles.grupoCampo}>
             <Text
               style={[
@@ -960,7 +1440,7 @@ export default function ClientesAdministrador() {
                 isDark && { color: colors.textSecondary },
               ]}
             >
-              Nombre completo
+              Nombre completo *
             </Text>
             <TextInput
               value={formulario.nombre}
@@ -982,6 +1462,7 @@ export default function ClientesAdministrador() {
             ) : null}
           </View>
 
+          {/* Número de teléfono */}
           <View style={styles.grupoCampo}>
             <Text
               style={[
@@ -989,12 +1470,12 @@ export default function ClientesAdministrador() {
                 isDark && { color: colors.textSecondary },
               ]}
             >
-              Número de teléfono
+              Número de teléfono *
             </Text>
             <TextInput
               value={formulario.numero}
               onChangeText={(valor) => actualizarCampo("numero", valor)}
-              placeholder="Ejemplo: 72900000"
+              placeholder="Ejemplo: 78945612"
               placeholderTextColor={colors.inputPlaceholder}
               keyboardType="phone-pad"
               style={[
@@ -1012,70 +1493,77 @@ export default function ClientesAdministrador() {
             ) : null}
           </View>
 
-          <View style={styles.grupoCampo}>
-            <Text
-              style={[
-                styles.etiquetaCampo,
-                isDark && { color: colors.textSecondary },
-              ]}
-            >
-              Correo electrónico
-            </Text>
-            <TextInput
-              value={formulario.email}
-              onChangeText={(valor) => actualizarCampo("email", valor)}
-              placeholder="cliente@correo.com"
-              placeholderTextColor={colors.inputPlaceholder}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={[
-                styles.input,
-                isDark && {
-                  backgroundColor: colors.inputBg,
-                  borderColor: colors.inputBorder,
-                  color: colors.text,
-                },
-                errores.email && styles.inputError,
-              ]}
-            />
-            {errores.email ? (
-              <Text style={styles.textoError}>{errores.email}</Text>
-            ) : null}
-          </View>
+          {/* Correo y contraseña solo si tiene acceso a la app */}
+          {formulario.tieneAccesoApp && (
+            <>
+              <View style={styles.grupoCampo}>
+                <Text
+                  style={[
+                    styles.etiquetaCampo,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Correo electrónico *
+                </Text>
+                <TextInput
+                  value={formulario.email}
+                  onChangeText={(valor) => actualizarCampo("email", valor)}
+                  placeholder="cliente@correo.com"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={[
+                    styles.input,
+                    isDark && {
+                      backgroundColor: colors.inputBg,
+                      borderColor: colors.inputBorder,
+                      color: colors.text,
+                    },
+                    errores.email && styles.inputError,
+                  ]}
+                />
+                {errores.email ? (
+                  <Text style={styles.textoError}>{errores.email}</Text>
+                ) : null}
+              </View>
 
-          <View style={styles.grupoCampo}>
-            <Text
-              style={[
-                styles.etiquetaCampo,
-                isDark && { color: colors.textSecondary },
-              ]}
-            >
-              {clienteSeleccionado ? "Nueva contraseña" : "Contraseña"}
-            </Text>
-            <TextInput
-              value={formulario.contrasena}
-              onChangeText={(valor) => actualizarCampo("contrasena", valor)}
-              placeholder={
-                clienteSeleccionado
-                  ? "Déjala vacía para mantener la actual"
-                  : "Mínimo 6 caracteres"
-              }
-              placeholderTextColor={colors.inputPlaceholder}
-              secureTextEntry
-              style={[
-                styles.input,
-                isDark && {
-                  backgroundColor: colors.inputBg,
-                  borderColor: colors.inputBorder,
-                  color: colors.text,
-                },
-                errores.contrasena && styles.inputError,
-              ]}
-            />
-            {errores.contrasena ? (
-              <Text style={styles.textoError}>{errores.contrasena}</Text>
-            ) : null}
-          </View>
+              <View style={styles.grupoCampo}>
+                <Text
+                  style={[
+                    styles.etiquetaCampo,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  {clienteSeleccionado && clienteSeleccionado.tieneAccesoApp
+                    ? "Nueva contraseña (opcional)"
+                    : "Contraseña para la app móvil *"}
+                </Text>
+                <TextInput
+                  value={formulario.contrasena}
+                  onChangeText={(valor) => actualizarCampo("contrasena", valor)}
+                  placeholder={
+                    clienteSeleccionado && clienteSeleccionado.tieneAccesoApp
+                      ? "Déjala vacía para mantener la actual"
+                      : "Mínimo 6 caracteres"
+                  }
+                  placeholderTextColor={colors.inputPlaceholder}
+                  secureTextEntry
+                  style={[
+                    styles.input,
+                    isDark && {
+                      backgroundColor: colors.inputBg,
+                      borderColor: colors.inputBorder,
+                      color: colors.text,
+                    },
+                    errores.contrasena && styles.inputError,
+                  ]}
+                />
+                {errores.contrasena ? (
+                  <Text style={styles.textoError}>{errores.contrasena}</Text>
+                ) : null}
+              </View>
+            </>
+          )}
         </View>
       </ModalSistema>
 

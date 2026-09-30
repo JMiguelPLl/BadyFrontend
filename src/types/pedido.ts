@@ -64,7 +64,7 @@ export interface CrearDetallePedidoDto {
 
 export interface CrearPedidoDto {
   idCliente: number;
-  idSucursal: number;
+  idSucursal?: number | null;
   observacion?: string | null;
   detalles: CrearDetallePedidoDto[];
 }

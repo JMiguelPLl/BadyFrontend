@@ -217,8 +217,12 @@ tarjetaTabla: {
     minWidth: 130,
   },
 
+  columnaTipo: {
+    width: 140,
+  },
+
   columnaCorreo: {
-    flex: 2.2,
+    flex: 2,
     minWidth: 140,
   },
 
@@ -526,5 +530,174 @@ puntoInactivo: {
   borderRadius: 4,
   backgroundColor: "#dc2626",
 },
+
+  badgeAppMovil: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignSelf: "flex-start",
+  },
+
+  badgeAppMovilTexto: {
+    color: "#1d4ed8",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  badgePresencial: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    alignSelf: "flex-start",
+  },
+
+  badgePresencialTexto: {
+    color: "#475569",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  correoPresencialTexto: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+
+  pestanasTipo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+
+  pestanaTipoBoton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#dce0e4",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  pestanaTipoBotonActiva: {
+    backgroundColor: "#1f2329",
+    borderColor: "#1f2329",
+  },
+
+  pestanaTipoTexto: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+
+  pestanaTipoTextoActiva: {
+    color: "#ffffff",
+  },
+
+  pestanaTipoBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+  },
+
+  pestanaTipoBadgeActiva: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+
+  pestanaTipoBadgeTexto: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#4b5563",
+  },
+
+  pestanaTipoBadgeTextoActiva: {
+    color: "#ffffff",
+  },
+
+  iconoAppResumen: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+  },
+
+  iconoPresencialResumen: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+  },
+
+  tipoClienteSelector: {
+    gap: 10,
+    marginBottom: 8,
+  },
+
+  tipoClienteOpcion: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    gap: 12,
+  },
+
+  tipoClienteOpcionActiva: {
+    borderColor: "#2563eb",
+    backgroundColor: "#f8faff",
+  },
+
+  tipoClienteTitulo: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1e293b",
+  },
+
+  tipoClienteSubtitulo: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+  },
+
+  bannerInfoPresencial: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 12,
+    borderRadius: 9,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 6,
+  },
+
+  bannerInfoPresencialTexto: {
+    flex: 1,
+    fontSize: 12,
+    color: "#475569",
+    lineHeight: 17,
+  },
 
 });

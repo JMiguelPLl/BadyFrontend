@@ -702,4 +702,149 @@ export const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#b82018",
   },
+
+  botonNuevoPedido: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 11,
+    backgroundColor: "#b82018",
+  },
+
+  botonNuevoPedidoTexto: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  cajaBuscadorCliente: {
+    position: "relative",
+    zIndex: 100,
+  },
+
+  dropdownClientes: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    maxHeight: 220,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dce0e4",
+    borderRadius: 10,
+    zIndex: 9999,
+    elevation: 20,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+
+  itemClienteDropdown: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f3f5",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  itemClienteDropdownNombre: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1f2329",
+  },
+
+  itemClienteDropdownSub: {
+    fontSize: 11,
+    color: "#747b83",
+    marginTop: 2,
+  },
+
+  tarjetaClienteSeleccionado: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#2563eb",
+    backgroundColor: "#eff6ff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  badgeClientePresencial: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  badgeClienteApp: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  badgeClienteTexto: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  botonCambiarCliente: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#ffffff",
+  },
+
+  botonCambiarClienteTexto: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2563eb",
+  },
+
+  resumenCreacionCaja: {
+    marginTop: 14,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+
+  resumenCreacionFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+
+  resumenCreacionTotalTexto: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1e293b",
+  },
+
+  resumenCreacionTotalMonto: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#b82018",
+  },
 });

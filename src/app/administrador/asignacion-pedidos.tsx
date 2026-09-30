@@ -23,8 +23,18 @@ import {
   listarPedidos,
   obtenerPedidoPorId,
 } from "../../services/asignacionPedidoService";
-import { listarProductosDisponibles } from "../../services/PedidosService";
-import { ProductoPedido } from "../../types/pedido";
+import {
+  crearPedido,
+  listarProductosDisponibles,
+  listarSucursalesCliente,
+} from "../../services/PedidosService";
+import { listarClientesActivos } from "../../services/clienteService";
+import { Cliente } from "../../types/cliente";
+import {
+  CrearPedidoDto,
+  ProductoPedido,
+  SucursalPedido,
+} from "../../types/pedido";
 
 import {
   AsignacionPedido,
@@ -50,6 +60,7 @@ type ModalActivo =
   | "asignar"
   | "detalleAsignacion"
   | "editarPedido"
+  | "crearPedido"
   | "calendarioDesde"
   | "calendarioHasta"
   | "mensaje";
@@ -93,6 +104,21 @@ export default function AsignacionPedidosScreen() {
   const [cantidadesEdicion, setCantidadesEdicion] = useState<Record<number, number>>({});
   const [observacionEdicion, setObservacionEdicion] = useState("");
   const [motivoEdicionForm, setMotivoEdicionForm] = useState("");
+
+  // Estados para Creación de Pedido por Administrador (Venta Mostrador)
+  const [clientesParaPedido, setClientesParaPedido] = useState<Cliente[]>([]);
+  const [cargandoClientesPedido, setCargandoClientesPedido] = useState(false);
+  const [clienteSeleccionadoPedido, setClienteSeleccionadoPedido] = useState<Cliente | null>(null);
+  const [busquedaClientePedido, setBusquedaClientePedido] = useState("");
+  const [mostrarDropdownClientes, setMostrarDropdownClientes] = useState(false);
+
+  const [sucursalesClientePedido, setSucursalesClientePedido] = useState<SucursalPedido[]>([]);
+  const [idSucursalSeleccionadaPedido, setIdSucursalSeleccionadaPedido] = useState<number | null>(null);
+
+  const [productosCreacion, setProductosCreacion] = useState<ProductoPedido[]>([]);
+  const [busquedaProductoCreacion, setBusquedaProductoCreacion] = useState("");
+  const [cantidadesCreacion, setCantidadesCreacion] = useState<Record<number, number>>({});
+  const [observacionCreacion, setObservacionCreacion] = useState("");
 
   const [mensaje, setMensaje] = useState("");
   const [esError, setEsError] = useState(false);
@@ -467,6 +493,154 @@ export default function AsignacionPedidosScreen() {
     }
   };
 
+  const abrirCrearPedido = async () => {
+    setClienteSeleccionadoPedido(null);
+    setBusquedaClientePedido("");
+    setMostrarDropdownClientes(false);
+    setSucursalesClientePedido([]);
+    setIdSucursalSeleccionadaPedido(null);
+    setCantidadesCreacion({});
+    setObservacionCreacion("");
+    setBusquedaProductoCreacion("");
+    setModal("crearPedido");
+
+    try {
+      setCargandoClientesPedido(true);
+      const [dataClientes, dataProductos] = await Promise.all([
+        listarClientesActivos(),
+        listarProductosDisponibles(),
+      ]);
+      setClientesParaPedido(dataClientes);
+      setProductosCreacion(dataProductos);
+    } catch (err) {
+      abrirMensaje(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron cargar clientes y productos.",
+        true
+      );
+    } finally {
+      setCargandoClientesPedido(false);
+    }
+  };
+
+  const seleccionarClienteParaPedido = async (c: Cliente) => {
+    setClienteSeleccionadoPedido(c);
+    setBusquedaClientePedido(c.nombre);
+    setMostrarDropdownClientes(false);
+    setIdSucursalSeleccionadaPedido(null);
+
+    try {
+      const sucs = await listarSucursalesCliente(c.id);
+      setSucursalesClientePedido(
+        sucs.filter((s) => s.estado.toLowerCase() !== "inactivo")
+      );
+    } catch {
+      setSucursalesClientePedido([]);
+    }
+  };
+
+  const cambiarCantidadCreacion = (idProducto: number, delta: number) => {
+    setCantidadesCreacion((prev) => {
+      const actual = prev[idProducto] || 0;
+      const nuevo = Math.max(0, actual + delta);
+      if (nuevo === 0) {
+        const copia = { ...prev };
+        delete copia[idProducto];
+        return copia;
+      }
+      return { ...prev, [idProducto]: nuevo };
+    });
+  };
+
+  const resumenCreacion = useMemo(() => {
+    let totalItems = 0;
+    let totalMonto = 0;
+
+    productosCreacion.forEach((p) => {
+      const cant = cantidadesCreacion[p.id] || 0;
+      if (cant > 0) {
+        totalItems += cant;
+        totalMonto += cant * p.precio;
+      }
+    });
+
+    return { totalItems, totalMonto };
+  }, [productosCreacion, cantidadesCreacion]);
+
+  const clientesFiltradosPedido = useMemo(() => {
+    const q = busquedaClientePedido.trim().toLowerCase();
+    if (!q) return clientesParaPedido.slice(0, 10);
+    return clientesParaPedido
+      .filter((c) => {
+        const n = (c.nombre || "").toLowerCase();
+        const num = (c.numero || "").toLowerCase();
+        const e = (c.email || "").toLowerCase();
+        return n.includes(q) || num.includes(q) || e.includes(q);
+      })
+      .slice(0, 15);
+  }, [clientesParaPedido, busquedaClientePedido]);
+
+  const productosFiltradosCreacion = useMemo(() => {
+    const q = busquedaProductoCreacion.trim().toLowerCase();
+    if (!q) return productosCreacion;
+    return productosCreacion.filter((p) =>
+      p.nombre.toLowerCase().includes(q) ||
+      p.descripcion.toLowerCase().includes(q)
+    );
+  }, [productosCreacion, busquedaProductoCreacion]);
+
+  const guardarNuevoPedido = async () => {
+    if (!clienteSeleccionadoPedido) {
+      abrirMensaje("Debes seleccionar un cliente para el pedido.", true);
+      return;
+    }
+
+    if (resumenCreacion.totalItems <= 0) {
+      abrirMensaje(
+        "Debes seleccionar al menos un producto con cantidad mayor a 0.",
+        true
+      );
+      return;
+    }
+
+    try {
+      setProcesando(true);
+
+      const detalles = Object.entries(cantidadesCreacion)
+        .map(([idStr, cantidad]) => ({
+          idProducto: Number(idStr),
+          cantidad: Number(cantidad),
+        }))
+        .filter((d) => d.cantidad > 0);
+
+      const dto: CrearPedidoDto = {
+        idCliente: clienteSeleccionadoPedido.id,
+        idSucursal: idSucursalSeleccionadaPedido || null,
+        observacion: observacionCreacion.trim() || undefined,
+        detalles,
+      };
+
+      const res = await crearPedido(dto);
+      await cargarTodo();
+      setModal("ninguno");
+      abrirMensaje(
+        res.message ||
+          `¡Pedido #${res.idPedido ?? ""} registrado exitosamente en estado Pendiente!`,
+        false
+      );
+    } catch (error) {
+      abrirMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar el pedido.",
+        true
+      );
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   const cerrarModal = () => {
     if (procesando) return;
 
@@ -479,6 +653,14 @@ export default function AsignacionPedidosScreen() {
     setMotivoEdicionForm("");
     setObservacionEdicion("");
     setModoAsignacion("crear");
+    setClienteSeleccionadoPedido(null);
+    setBusquedaClientePedido("");
+    setMostrarDropdownClientes(false);
+    setSucursalesClientePedido([]);
+    setIdSucursalSeleccionadaPedido(null);
+    setCantidadesCreacion({});
+    setObservacionCreacion("");
+    setBusquedaProductoCreacion("");
   };
 
   const limpiarFiltros = () => {
@@ -531,6 +713,20 @@ export default function AsignacionPedidosScreen() {
             Gestiona pedidos y distribuciones de BADY&apos;S.
           </Text>
         </View>
+
+        <Pressable
+          onPress={abrirCrearPedido}
+          style={({ pressed }) => [
+            styles.botonNuevoPedido,
+            { backgroundColor: colors.primary },
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Ionicons name="cart-outline" size={20} color="#ffffff" />
+          <Text style={styles.botonNuevoPedidoTexto}>
+            Nuevo Pedido / Venta Mostrador
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.resumen}>
@@ -1861,6 +2057,736 @@ export default function AsignacionPedidosScreen() {
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.confirmarTexto}>Guardar Cambios</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Crear Pedido / Venta Mostrador por Administrador */}
+      <Modal
+        visible={modal === "crearPedido"}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModal}
+      >
+        <View
+          style={[
+            styles.modalFondo,
+            isDark && { backgroundColor: colors.modalBackdrop },
+          ]}
+        >
+          <View
+            style={[
+              styles.modal,
+              styles.modalAmplio,
+              isDark && {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <ModalHeader
+              titulo="➕ Nuevo Pedido / Venta Mostrador"
+              onCerrar={cerrarModal}
+            />
+
+            {cargandoClientesPedido ? (
+              <View
+                style={[
+                  styles.modalBody,
+                  {
+                    minHeight: 280,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  },
+                ]}
+              >
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text
+                  style={{
+                    marginTop: 12,
+                    color: colors.textSecondary,
+                    fontSize: 13,
+                  }}
+                >
+                  Cargando clientes y productos...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.modalBody}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* 1. SELECCIÓN DE CLIENTE */}
+                <Text
+                  style={[
+                    styles.seccionTitulo,
+                    { marginTop: 4 },
+                    isDark && { color: colors.text },
+                  ]}
+                >
+                  1. Seleccionar Cliente *
+                </Text>
+
+                {clienteSeleccionadoPedido ? (
+                  <View
+                    style={[
+                      styles.tarjetaClienteSeleccionado,
+                      isDark && {
+                        backgroundColor: "rgba(37, 99, 235, 0.15)",
+                        borderColor: "#3b82f6",
+                      },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 12,
+                        flex: 1,
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles.avatar,
+                          {
+                            backgroundColor: clienteSeleccionadoPedido.tieneAccesoApp
+                              ? "#2563eb"
+                              : "#475569",
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: "#ffffff",
+                            fontWeight: "900",
+                            fontSize: 15,
+                          }}
+                        >
+                          {clienteSeleccionadoPedido.nombre
+                            .charAt(0)
+                            .toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.productoNombre,
+                            isDark && { color: colors.text },
+                          ]}
+                        >
+                          {clienteSeleccionadoPedido.nombre}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.productoSecundario,
+                            isDark && { color: colors.textSecondary },
+                          ]}
+                        >
+                          📞 {clienteSeleccionadoPedido.numero}{" "}
+                          {clienteSeleccionadoPedido.email
+                            ? `• ✉️ ${clienteSeleccionadoPedido.email}`
+                            : ""}
+                        </Text>
+                        <View
+                          style={{
+                            marginTop: 4,
+                            flexDirection: "row",
+                            gap: 6,
+                          }}
+                        >
+                          {clienteSeleccionadoPedido.tieneAccesoApp ? (
+                            <View style={styles.badgeClienteApp}>
+                              <Ionicons
+                                name="phone-portrait-outline"
+                                size={12}
+                                color="#1d4ed8"
+                              />
+                              <Text
+                                style={[
+                                  styles.badgeClienteTexto,
+                                  { color: "#1d4ed8" },
+                                ]}
+                              >
+                                App Móvil
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.badgeClientePresencial}>
+                              <Ionicons
+                                name="storefront-outline"
+                                size={12}
+                                color="#475569"
+                              />
+                              <Text
+                                style={[
+                                  styles.badgeClienteTexto,
+                                  { color: "#475569" },
+                                ]}
+                              >
+                                Presencial / Mostrador
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      onPress={() => {
+                        setClienteSeleccionadoPedido(null);
+                        setBusquedaClientePedido("");
+                        setMostrarDropdownClientes(true);
+                      }}
+                      style={[
+                        styles.botonCambiarCliente,
+                        isDark && {
+                          backgroundColor: colors.surfaceElevated,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.botonCambiarClienteTexto,
+                          isDark && { color: "#93c5fd" },
+                        ]}
+                      >
+                        Cambiar
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.cajaBuscadorCliente}>
+                    <View
+                      style={[
+                        styles.buscador,
+                        { maxWidth: "100%", width: "100%" },
+                        isDark && {
+                          backgroundColor: colors.inputBg,
+                          borderColor: colors.inputBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="search-outline"
+                        size={18}
+                        color={colors.inputPlaceholder}
+                      />
+                      <TextInput
+                        value={busquedaClientePedido}
+                        onChangeText={(t) => {
+                          setBusquedaClientePedido(t);
+                          setMostrarDropdownClientes(true);
+                        }}
+                        onFocus={() => setMostrarDropdownClientes(true)}
+                        placeholder="Escribe el nombre o teléfono del cliente..."
+                        placeholderTextColor={colors.inputPlaceholder}
+                        style={[
+                          styles.inputBusqueda,
+                          isDark && { color: colors.text },
+                        ]}
+                      />
+                      {busquedaClientePedido ? (
+                        <Pressable
+                          onPress={() => setBusquedaClientePedido("")}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={18}
+                            color={colors.inputPlaceholder}
+                          />
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    {mostrarDropdownClientes && (
+                      <View
+                        style={[
+                          styles.dropdownClientes,
+                          isDark && {
+                            backgroundColor: colors.modalBg,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <ScrollView
+                          style={{ maxHeight: 200 }}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {clientesFiltradosPedido.length === 0 ? (
+                            <View
+                              style={{
+                                padding: 14,
+                                alignItems: "center",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: colors.textSecondary,
+                                  fontSize: 13,
+                                }}
+                              >
+                                No se encontraron clientes activos con ese término.
+                              </Text>
+                            </View>
+                          ) : (
+                            clientesFiltradosPedido.map((c) => (
+                              <Pressable
+                                key={c.id}
+                                onPress={() =>
+                                  seleccionarClienteParaPedido(c)
+                                }
+                                style={({ pressed }) => [
+                                  styles.itemClienteDropdown,
+                                  isDark && {
+                                    borderBottomColor: colors.borderLight,
+                                  },
+                                  pressed && {
+                                    backgroundColor: isDark
+                                      ? colors.surfaceElevated
+                                      : "#f8fafc",
+                                  },
+                                ]}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text
+                                    style={[
+                                      styles.itemClienteDropdownNombre,
+                                      isDark && { color: colors.text },
+                                    ]}
+                                  >
+                                    {c.nombre}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.itemClienteDropdownSub,
+                                      isDark && {
+                                        color: colors.textSecondary,
+                                      },
+                                    ]}
+                                  >
+                                    Tel: {c.numero}{" "}
+                                    {c.email ? `• ${c.email}` : ""}
+                                  </Text>
+                                </View>
+                                {c.tieneAccesoApp ? (
+                                  <View style={styles.badgeClienteApp}>
+                                    <Text
+                                      style={[
+                                        styles.badgeClienteTexto,
+                                        { color: "#1d4ed8" },
+                                      ]}
+                                    >
+                                      App
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <View
+                                    style={styles.badgeClientePresencial}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.badgeClienteTexto,
+                                        { color: "#475569" },
+                                      ]}
+                                    >
+                                      Presencial
+                                    </Text>
+                                  </View>
+                                )}
+                              </Pressable>
+                            ))
+                          )}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* SUCURSAL (Opcional - backend asigna mostrador por defecto si null) */}
+                {clienteSeleccionadoPedido &&
+                  sucursalesClientePedido.length > 0 && (
+                    <View style={{ marginTop: 14 }}>
+                      <Text
+                        style={[
+                          styles.campoLabel,
+                          isDark && { color: colors.textSecondary },
+                        ]}
+                      >
+                        Sucursal de Entrega (Opcional)
+                      </Text>
+                      <View
+                        style={[
+                          styles.selectorCaja,
+                          { width: "100%" },
+                          isDark && {
+                            backgroundColor: colors.inputBg,
+                            borderColor: colors.inputBorder,
+                          },
+                        ]}
+                      >
+                        <Picker
+                          selectedValue={idSucursalSeleccionadaPedido || 0}
+                          onValueChange={(val) =>
+                            setIdSucursalSeleccionadaPedido(
+                              val === 0 ? null : val
+                            )
+                          }
+                          style={[
+                            styles.selector,
+                            isDark && { color: colors.text },
+                          ]}
+                          dropdownIconColor={isDark ? colors.text : "#333"}
+                        >
+                          <Picker.Item
+                            label="Sucursal Principal / Mostrador (Por defecto)"
+                            value={0}
+                          />
+                          {sucursalesClientePedido.map((s) => (
+                            <Picker.Item
+                              key={s.id}
+                              label={`${s.nombre}${s.ubicacion ? ` (${s.ubicacion})` : ""}`}
+                              value={s.id}
+                            />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  )}
+
+                {/* 2. CATÁLOGO DE PRODUCTOS */}
+                <View
+                  style={{
+                    marginTop: 20,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.seccionTitulo,
+                      { marginTop: 0, marginBottom: 0 },
+                      isDark && { color: colors.text },
+                    ]}
+                  >
+                    2. Productos del Pedido *
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "700",
+                      color: colors.textSecondary,
+                    }}
+                  >
+                    {resumenCreacion.totalItems} unidades seleccionadas
+                  </Text>
+                </View>
+
+                {/* Buscador de productos */}
+                <View
+                  style={[
+                    styles.buscador,
+                    {
+                      maxWidth: "100%",
+                      width: "100%",
+                      marginVertical: 10,
+                    },
+                    isDark && {
+                      backgroundColor: colors.inputBg,
+                      borderColor: colors.inputBorder,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="search-outline"
+                    size={17}
+                    color={colors.inputPlaceholder}
+                  />
+                  <TextInput
+                    value={busquedaProductoCreacion}
+                    onChangeText={setBusquedaProductoCreacion}
+                    placeholder="Filtrar productos por nombre o descripción..."
+                    placeholderTextColor={colors.inputPlaceholder}
+                    style={[
+                      styles.inputBusqueda,
+                      isDark && { color: colors.text },
+                    ]}
+                  />
+                  {busquedaProductoCreacion ? (
+                    <Pressable
+                      onPress={() => setBusquedaProductoCreacion("")}
+                    >
+                      <Ionicons
+                        name="close-circle"
+                        size={16}
+                        color={colors.inputPlaceholder}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {/* Lista de productos con selector de cantidad */}
+                {productosFiltradosCreacion.length === 0 ? (
+                  <View style={{ padding: 20, alignItems: "center" }}>
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 13,
+                      }}
+                    >
+                      No se encontraron productos disponibles.
+                    </Text>
+                  </View>
+                ) : (
+                  productosFiltradosCreacion.map((prod) => {
+                    const cant = cantidadesCreacion[prod.id] || 0;
+                    const subtotalProd = cant * prod.precio;
+
+                    return (
+                      <View
+                        key={prod.id}
+                        style={[
+                          styles.itemEdicionProducto,
+                          cant > 0 && {
+                            borderColor: colors.primary,
+                            backgroundColor: isDark
+                              ? "rgba(184, 32, 24, 0.12)"
+                              : "#fff8f8",
+                          },
+                          isDark &&
+                            cant === 0 && {
+                              backgroundColor: colors.card,
+                              borderColor: colors.borderLight,
+                            },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.productoNombre,
+                              isDark && { color: colors.text },
+                            ]}
+                          >
+                            {prod.nombre}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.productoSecundario,
+                              isDark && { color: colors.textSecondary },
+                            ]}
+                          >
+                            Bs {formatearDinero(prod.precio)} c/u • Stock:{" "}
+                            {prod.stock} disp.
+                          </Text>
+                          {cant > 0 && (
+                            <Text
+                              style={{
+                                marginTop: 4,
+                                color: colors.primary,
+                                fontSize: 12,
+                                fontWeight: "800",
+                              }}
+                            >
+                              Subtotal: Bs {formatearDinero(subtotalProd)}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.controlCantidad}>
+                          <Pressable
+                            onPress={() =>
+                              cambiarCantidadCreacion(prod.id, -1)
+                            }
+                            disabled={cant <= 0}
+                            style={[
+                              styles.botonCantidad,
+                              cant <= 0 && { opacity: 0.35 },
+                              isDark && {
+                                backgroundColor: colors.surfaceElevated,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name="remove"
+                              size={16}
+                              color={isDark ? colors.text : "#333"}
+                            />
+                          </Pressable>
+
+                          <Text
+                            style={[
+                              styles.cantidadTexto,
+                              cant > 0 && {
+                                color: colors.primary,
+                                fontWeight: "900",
+                              },
+                              isDark && cant === 0 && { color: colors.text },
+                            ]}
+                          >
+                            {cant}
+                          </Text>
+
+                          <Pressable
+                            onPress={() =>
+                              cambiarCantidadCreacion(prod.id, 1)
+                            }
+                            disabled={
+                              prod.stock > 0 && cant >= prod.stock
+                            }
+                            style={[
+                              styles.botonCantidad,
+                              prod.stock > 0 &&
+                                cant >= prod.stock && { opacity: 0.35 },
+                              isDark && {
+                                backgroundColor: colors.surfaceElevated,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name="add"
+                              size={16}
+                              color={isDark ? colors.text : "#333"}
+                            />
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+
+                {/* 3. RESUMEN Y TOTAL */}
+                <View
+                  style={[
+                    styles.resumenCreacionCaja,
+                    isDark && {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View style={styles.resumenCreacionFila}>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      }}
+                    >
+                      Artículos seleccionados:
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "800",
+                        color: isDark ? colors.text : "#1f2329",
+                      }}
+                    >
+                      {resumenCreacion.totalItems} unidades
+                    </Text>
+                  </View>
+
+                  <View style={styles.resumenCreacionFila}>
+                    <Text
+                      style={[
+                        styles.resumenCreacionTotalTexto,
+                        isDark && { color: colors.text },
+                      ]}
+                    >
+                      Total del Pedido:
+                    </Text>
+                    <Text style={styles.resumenCreacionTotalMonto}>
+                      Bs {formatearDinero(resumenCreacion.totalMonto)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 4. OBSERVACIÓN (OPCIONAL) */}
+                <View style={{ marginTop: 14, marginBottom: 16 }}>
+                  <Text
+                    style={[
+                      styles.campoLabel,
+                      isDark && { color: colors.textSecondary },
+                    ]}
+                  >
+                    Observación de la Venta (Opcional)
+                  </Text>
+                  <TextInput
+                    value={observacionCreacion}
+                    onChangeText={setObservacionCreacion}
+                    placeholder="Ej: Venta directa en mostrador 20 Badies, cliente retira inmediatamente..."
+                    placeholderTextColor={colors.inputPlaceholder}
+                    style={[
+                      styles.inputObservacion,
+                      isDark && {
+                        backgroundColor: colors.surfaceElevated,
+                        borderColor: colors.border,
+                        color: colors.text,
+                      },
+                    ]}
+                  />
+                </View>
+              </ScrollView>
+            )}
+
+            <View style={styles.modalAcciones}>
+              <Pressable
+                onPress={cerrarModal}
+                style={[
+                  styles.botonModal,
+                  styles.botonCancelar,
+                  isDark && {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cancelarTexto,
+                    isDark && { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancelar
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={
+                  procesando ||
+                  cargandoClientesPedido ||
+                  !clienteSeleccionadoPedido ||
+                  resumenCreacion.totalItems <= 0
+                }
+                onPress={guardarNuevoPedido}
+                style={[
+                  styles.botonModal,
+                  styles.botonConfirmar,
+                  { backgroundColor: colors.primary },
+                  (procesando ||
+                    cargandoClientesPedido ||
+                    !clienteSeleccionadoPedido ||
+                    resumenCreacion.totalItems <= 0) && {
+                    opacity: 0.5,
+                  },
+                ]}
+              >
+                {procesando ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmarTexto}>
+                    Confirmar y Crear Pedido
+                  </Text>
                 )}
               </Pressable>
             </View>

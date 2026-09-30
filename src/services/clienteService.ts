@@ -45,6 +45,24 @@ async function procesarRespuesta<T>(
   return resultado as T;
 }
 
+function normalizarCliente(item: any): Cliente {
+  const tieneAccesoApp =
+    typeof item?.tieneAccesoApp === "boolean"
+      ? item.tieneAccesoApp
+      : typeof item?.TieneAccesoApp === "boolean"
+      ? item.TieneAccesoApp
+      : Boolean(item?.email && String(item.email).trim().length > 0);
+
+  return {
+    id: Number(item?.id ?? item?.Id ?? 0),
+    nombre: item?.nombre ?? item?.Nombre ?? "",
+    numero: item?.numero ?? item?.Numero ?? "",
+    email: item?.email ?? item?.Email ?? null,
+    estado: (item?.estado ?? item?.Estado ?? "Activo") as "Activo" | "Inactivo",
+    tieneAccesoApp,
+  };
+}
+
 export async function listarClientes(): Promise<Cliente[]> {
   const headers = await obtenerHeaders();
 
@@ -56,8 +74,10 @@ export async function listarClientes(): Promise<Cliente[]> {
     }
   );
 
-  return await procesarRespuesta<Cliente[]>(response);
+  const data = await procesarRespuesta<any[]>(response);
+  return Array.isArray(data) ? data.map(normalizarCliente) : [];
 }
+
 export async function listarClientesActivos(): Promise<Cliente[]> {
   const headers = await obtenerHeaders();
 
@@ -69,7 +89,8 @@ export async function listarClientesActivos(): Promise<Cliente[]> {
     }
   );
 
-  return await procesarRespuesta<Cliente[]>(response);
+  const data = await procesarRespuesta<any[]>(response);
+  return Array.isArray(data) ? data.map(normalizarCliente) : [];
 }
 
 export async function listarClientesInactivos(): Promise<Cliente[]> {
@@ -83,19 +104,35 @@ export async function listarClientesInactivos(): Promise<Cliente[]> {
     }
   );
 
-  return await procesarRespuesta<Cliente[]>(response);
+  const data = await procesarRespuesta<any[]>(response);
+  return Array.isArray(data) ? data.map(normalizarCliente) : [];
 }
+
 export async function crearCliente(
   datos: ClienteFormulario
 ): Promise<RespuestaCliente> {
   const headers = await obtenerHeaders();
+
+  const body: Record<string, any> = {
+    nombre: datos.nombre.trim(),
+    numero: datos.numero.trim(),
+  };
+
+  if (datos.tieneAccesoApp) {
+    if (datos.email && datos.email.trim()) {
+      body.email = datos.email.trim();
+    }
+    if (datos.contrasena && datos.contrasena.trim()) {
+      body.contrasena = datos.contrasena.trim();
+    }
+  }
 
   const response = await fetch(
     `${API_URL}/Cliente/Registrar`,
     {
       method: "POST",
       headers,
-      body: JSON.stringify(datos),
+      body: JSON.stringify(body),
     }
   );
 
@@ -110,12 +147,25 @@ export async function actualizarCliente(
 ): Promise<RespuestaCliente> {
   const headers = await obtenerHeaders();
 
+  const body: Record<string, any> = {
+    nombre: datos.nombre.trim(),
+    numero: datos.numero.trim(),
+  };
+
+  if (datos.email && datos.email.trim()) {
+    body.email = datos.email.trim();
+  }
+
+  if (datos.contrasena && datos.contrasena.trim()) {
+    body.contrasena = datos.contrasena.trim();
+  }
+
   const response = await fetch(
     `${API_URL}/Cliente/${id}`,
     {
       method: "PUT",
       headers,
-      body: JSON.stringify(datos),
+      body: JSON.stringify(body),
     }
   );
 

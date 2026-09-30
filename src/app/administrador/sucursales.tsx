@@ -41,7 +41,7 @@ type ModalActivo =
 interface ClienteAgrupado {
   id: number;
   nombre: string;
-  email: string;
+  email?: string | null;
   numero: string;
   estadoCliente: string;
   sucursales: Sucursal[];
@@ -217,7 +217,7 @@ export default function SucursalesAdministrador() {
 
         const coincideCliente =
           item.nombre.toLowerCase().includes(query) ||
-          item.email.toLowerCase().includes(query) ||
+          (item.email || "").toLowerCase().includes(query) ||
           item.numero.toLowerCase().includes(query);
 
         const coincideSucursal = sucursalesVisibles.some(
