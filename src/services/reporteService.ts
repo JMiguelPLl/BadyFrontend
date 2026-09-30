@@ -41,25 +41,80 @@ import {
 // UTILITARIOS DE FECHAS
 // =========================================================
 
+export function obtenerFechaLocal(d: Date = new Date()): string {
+  const anio = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
+export function extraerFechaSoloDia(fechaStr?: string): string {
+  if (!fechaStr) return "";
+  const str = String(fechaStr).trim();
+  if (!str) return "";
+
+  // 1. Si es formato puro YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // 2. Si es una fecha completa, extraer según zona horaria local
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dia = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dia}`;
+    }
+  } catch {
+    // ignorar
+  }
+
+  // 3. Fallback: primeros 10 caracteres si empieza con YYYY-MM-DD
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+
+  return "";
+}
+
 export function formatearFechaCorta(fechaIso?: string): string {
   if (!fechaIso) return "-";
+  const str = String(fechaIso).trim();
+  if (!str) return "-";
+
+  // Si es solo YYYY-MM-DD, formatear directamente sin pasar por new Date para evitar desfases de zona horaria
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [anio, mes, dia] = str.split("-");
+    return `${dia}/${mes}/${anio}`;
+  }
+
   try {
-    const d = new Date(fechaIso);
-    if (isNaN(d.getTime())) return fechaIso;
+    const d = new Date(str);
+    if (isNaN(d.getTime())) {
+      const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+      return str;
+    }
     const dia = String(d.getDate()).padStart(2, "0");
     const mes = String(d.getMonth() + 1).padStart(2, "0");
     const anio = d.getFullYear();
     return `${dia}/${mes}/${anio}`;
   } catch {
-    return fechaIso || "-";
+    return str || "-";
   }
 }
 
 export function formatearFechaConHora(fechaIso?: string): string {
   if (!fechaIso) return "-";
+  const str = String(fechaIso).trim();
+  if (!str) return "-";
+
   try {
-    const d = new Date(fechaIso);
-    if (isNaN(d.getTime())) return fechaIso;
+    const d = new Date(str);
+    if (isNaN(d.getTime())) {
+      return formatearFechaCorta(str);
+    }
     const dia = String(d.getDate()).padStart(2, "0");
     const mes = String(d.getMonth() + 1).padStart(2, "0");
     const anio = d.getFullYear();
@@ -67,7 +122,7 @@ export function formatearFechaConHora(fechaIso?: string): string {
     const min = String(d.getMinutes()).padStart(2, "0");
     return `${dia}/${mes}/${anio} ${hora}:${min}`;
   } catch {
-    return fechaIso || "-";
+    return str || "-";
   }
 }
 
@@ -76,7 +131,7 @@ export function obtenerRangoPreset(preset: PresetFecha): {
   fin: string;
 } {
   const ahora = new Date();
-  const hoyStr = ahora.toISOString().split("T")[0];
+  const hoyStr = obtenerFechaLocal(ahora);
 
   switch (preset) {
     case "hoy":
@@ -87,7 +142,7 @@ export function obtenerRangoPreset(preset: PresetFecha): {
       const diaSemana = ahora.getDay() === 0 ? 6 : ahora.getDay() - 1; // Lunes = 0
       primerDiaSemana.setDate(ahora.getDate() - diaSemana);
       return {
-        inicio: primerDiaSemana.toISOString().split("T")[0],
+        inicio: obtenerFechaLocal(primerDiaSemana),
         fin: hoyStr,
       };
     }
@@ -95,7 +150,7 @@ export function obtenerRangoPreset(preset: PresetFecha): {
     case "mes": {
       const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
       return {
-        inicio: primerDiaMes.toISOString().split("T")[0],
+        inicio: obtenerFechaLocal(primerDiaMes),
         fin: hoyStr,
       };
     }
@@ -104,7 +159,7 @@ export function obtenerRangoPreset(preset: PresetFecha): {
       const hace30Dias = new Date(ahora);
       hace30Dias.setDate(ahora.getDate() - 30);
       return {
-        inicio: hace30Dias.toISOString().split("T")[0],
+        inicio: obtenerFechaLocal(hace30Dias),
         fin: hoyStr,
       };
     }
@@ -112,7 +167,7 @@ export function obtenerRangoPreset(preset: PresetFecha): {
     case "anio": {
       const primerDiaAnio = new Date(ahora.getFullYear(), 0, 1);
       return {
-        inicio: primerDiaAnio.toISOString().split("T")[0],
+        inicio: obtenerFechaLocal(primerDiaAnio),
         fin: hoyStr,
       };
     }
@@ -123,27 +178,48 @@ export function obtenerRangoPreset(preset: PresetFecha): {
   }
 }
 
-function estaEnRangoFecha(
+export function estaEnRangoFecha(
   fechaStr?: string,
   fechaInicio?: string,
   fechaFin?: string
 ): boolean {
   if (!fechaStr) return false;
-  if (!fechaInicio && !fechaFin) return true;
+  const fInicio = (fechaInicio || "").trim();
+  const fFin = (fechaFin || "").trim();
+  if (!fInicio && !fFin) return true;
 
+  // 1. Extraer la fecha local tal como la ve el usuario en su zona horaria
+  let fechaLocal = "";
   try {
-    const fechaObj = new Date(fechaStr);
-    if (isNaN(fechaObj.getTime())) return true;
-
-    const fechaSoloDia = fechaObj.toISOString().split("T")[0];
-
-    if (fechaInicio && fechaSoloDia < fechaInicio) return false;
-    if (fechaFin && fechaSoloDia > fechaFin) return false;
-
-    return true;
+    const d = new Date(fechaStr);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dia = String(d.getDate()).padStart(2, "0");
+      fechaLocal = `${y}-${m}-${dia}`;
+    }
   } catch {
-    return true;
+    // ignorar
   }
+
+  // 2. Extraer la fecha literal de la cadena original (si empieza con YYYY-MM-DD)
+  const match = String(fechaStr).match(/^(\d{4}-\d{2}-\d{2})/);
+  const fechaLiteral = match ? match[1] : "";
+
+  if (!fechaLocal && !fechaLiteral) return true;
+
+  // Es válido si la fecha local O la fecha literal caen dentro del rango [fInicio, fFin] (ambos inclusive)
+  const validaLocal =
+    Boolean(fechaLocal) &&
+    (!fInicio || fechaLocal >= fInicio) &&
+    (!fFin || fechaLocal <= fFin);
+
+  const validaLiteral =
+    Boolean(fechaLiteral) &&
+    (!fInicio || fechaLiteral >= fInicio) &&
+    (!fFin || fechaLiteral <= fFin);
+
+  return validaLocal || validaLiteral;
 }
 
 // =========================================================
@@ -248,7 +324,9 @@ export function procesarReporteVentas(
       });
 
       // Agrupación temporal para gráfica de evolución
-      const diaIso = p.fechaPedido ? p.fechaPedido.split("T")[0] : "S/F";
+      const diaIso = p.fechaPedido
+        ? extraerFechaSoloDia(p.fechaPedido) || p.fechaPedido.split("T")[0]
+        : "S/F";
       const diaActual = ventasPorDiaMap.get(diaIso) || { total: 0, cantidad: 0 };
       diaActual.total += p.total;
       diaActual.cantidad += 1;
