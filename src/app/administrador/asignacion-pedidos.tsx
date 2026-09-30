@@ -119,6 +119,8 @@ export default function AsignacionPedidosScreen() {
   const [busquedaProductoCreacion, setBusquedaProductoCreacion] = useState("");
   const [cantidadesCreacion, setCantidadesCreacion] = useState<Record<number, number>>({});
   const [observacionCreacion, setObservacionCreacion] = useState("");
+  const [esVentaDirectaCreacion, setEsVentaDirectaCreacion] = useState(true);
+  const [idTipoPagoCreacion, setIdTipoPagoCreacion] = useState<number>(1);
 
   const [mensaje, setMensaje] = useState("");
   const [esError, setEsError] = useState(false);
@@ -502,6 +504,8 @@ export default function AsignacionPedidosScreen() {
     setCantidadesCreacion({});
     setObservacionCreacion("");
     setBusquedaProductoCreacion("");
+    setEsVentaDirectaCreacion(true);
+    setIdTipoPagoCreacion(1);
     setModal("crearPedido");
 
     try {
@@ -604,6 +608,14 @@ export default function AsignacionPedidosScreen() {
       return;
     }
 
+    if (esVentaDirectaCreacion && !idTipoPagoCreacion) {
+      abrirMensaje(
+        "Debes seleccionar el método de pago (Efectivo o QR) para la venta directa.",
+        true
+      );
+      return;
+    }
+
     try {
       setProcesando(true);
 
@@ -617,6 +629,8 @@ export default function AsignacionPedidosScreen() {
       const dto: CrearPedidoDto = {
         idCliente: clienteSeleccionadoPedido.id,
         idSucursal: idSucursalSeleccionadaPedido || null,
+        esVentaDirecta: esVentaDirectaCreacion,
+        idTipoPago: esVentaDirectaCreacion ? idTipoPagoCreacion : null,
         observacion: observacionCreacion.trim() || undefined,
         detalles,
       };
@@ -626,14 +640,16 @@ export default function AsignacionPedidosScreen() {
       setModal("ninguno");
       abrirMensaje(
         res.message ||
-          `¡Pedido #${res.idPedido ?? ""} registrado exitosamente en estado Pendiente!`,
+          (esVentaDirectaCreacion
+            ? `¡Venta directa #${res.idPedido ?? ""} registrada y entregada con éxito!`
+            : `¡Pedido #${res.idPedido ?? ""} registrado exitosamente en estado Pendiente!`),
         false
       );
     } catch (error) {
       abrirMensaje(
         error instanceof Error
           ? error.message
-          : "No se pudo registrar el pedido.",
+          : "No se pudo registrar la venta/pedido.",
         true
       );
     } finally {
@@ -661,6 +677,8 @@ export default function AsignacionPedidosScreen() {
     setCantidadesCreacion({});
     setObservacionCreacion("");
     setBusquedaProductoCreacion("");
+    setEsVentaDirectaCreacion(true);
+    setIdTipoPagoCreacion(1);
   };
 
   const limpiarFiltros = () => {
@@ -2089,7 +2107,11 @@ export default function AsignacionPedidosScreen() {
             ]}
           >
             <ModalHeader
-              titulo="➕ Nuevo Pedido / Venta Mostrador"
+              titulo={
+                esVentaDirectaCreacion
+                  ? "🏢 Venta Directa en Mostrador"
+                  : "➕ Nuevo Pedido para Distribución"
+              }
               onCerrar={cerrarModal}
             />
 
@@ -2121,6 +2143,142 @@ export default function AsignacionPedidosScreen() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
               >
+                {/* SELECTOR DE MODALIDAD */}
+                <View style={styles.tipoVentaContenedor}>
+                  <Pressable
+                    onPress={() => setEsVentaDirectaCreacion(true)}
+                    style={[
+                      styles.tipoVentaBoton,
+                      esVentaDirectaCreacion && styles.tipoVentaBotonActivo,
+                      isDark && {
+                        backgroundColor: esVentaDirectaCreacion
+                          ? "rgba(184, 32, 24, 0.15)"
+                          : colors.surfaceElevated,
+                        borderColor: esVentaDirectaCreacion
+                          ? colors.primary
+                          : colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="storefront-outline"
+                      size={20}
+                      color={
+                        esVentaDirectaCreacion
+                          ? colors.primary
+                          : colors.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.tipoVentaBotonTexto,
+                        esVentaDirectaCreacion && styles.tipoVentaBotonTextoActivo,
+                        isDark && {
+                          color: esVentaDirectaCreacion
+                            ? colors.primary
+                            : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      🏢 Venta Mostrador
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setEsVentaDirectaCreacion(false)}
+                    style={[
+                      styles.tipoVentaBoton,
+                      !esVentaDirectaCreacion && styles.tipoVentaBotonActivo,
+                      isDark && {
+                        backgroundColor: !esVentaDirectaCreacion
+                          ? "rgba(184, 32, 24, 0.15)"
+                          : colors.surfaceElevated,
+                        borderColor: !esVentaDirectaCreacion
+                          ? colors.primary
+                          : colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="bicycle-outline"
+                      size={20}
+                      color={
+                        !esVentaDirectaCreacion
+                          ? colors.primary
+                          : colors.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.tipoVentaBotonTexto,
+                        !esVentaDirectaCreacion && styles.tipoVentaBotonTextoActivo,
+                        isDark && {
+                          color: !esVentaDirectaCreacion
+                            ? colors.primary
+                            : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      🚚 Para Distribución
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {esVentaDirectaCreacion ? (
+                  <View
+                    style={[
+                      styles.bannerVentaDirecta,
+                      isDark && {
+                        backgroundColor: "rgba(22, 101, 52, 0.15)",
+                        borderColor: "rgba(34, 197, 94, 0.3)",
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={isDark ? "#4ade80" : "#166534"}
+                    />
+                    <Text
+                      style={[
+                        styles.bannerVentaDirectaTexto,
+                        isDark && { color: "#86efac" },
+                      ]}
+                    >
+                      Venta directa en local: Se marca automáticamente como Entregada, descuenta stock de inmediato y registra el cobro en caja.
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.bannerVentaDirecta,
+                      {
+                        backgroundColor: "#eff6ff",
+                        borderColor: "#bfdbfe",
+                      },
+                      isDark && {
+                        backgroundColor: "rgba(30, 58, 138, 0.15)",
+                        borderColor: "rgba(59, 130, 246, 0.3)",
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="information-circle"
+                      size={20}
+                      color={isDark ? "#60a5fa" : "#1d4ed8"}
+                    />
+                    <Text
+                      style={[
+                        styles.bannerVentaDirectaTexto,
+                        { color: "#1e40af" },
+                        isDark && { color: "#93c5fd" },
+                      ]}
+                    >
+                      Pedido para reparto: Se creará como Pendiente para ser asignado a un repartidor o camión de distribución.
+                    </Text>
+                  </View>
+                )}
+
                 {/* 1. SELECCIÓN DE CLIENTE */}
                 <Text
                   style={[
@@ -2703,13 +2861,116 @@ export default function AsignacionPedidosScreen() {
                         isDark && { color: colors.text },
                       ]}
                     >
-                      Total del Pedido:
+                      {esVentaDirectaCreacion ? "Total a Cobrar:" : "Total del Pedido:"}
                     </Text>
                     <Text style={styles.resumenCreacionTotalMonto}>
                       Bs {formatearDinero(resumenCreacion.totalMonto)}
                     </Text>
                   </View>
                 </View>
+
+                {/* MÉTODO DE PAGO (SOLO PARA VENTA DIRECTA) */}
+                {esVentaDirectaCreacion && (
+                  <View style={{ marginTop: 14 }}>
+                    <Text
+                      style={[
+                        styles.campoLabel,
+                        isDark && { color: colors.textSecondary },
+                      ]}
+                    >
+                      Método de Pago (Cobro Inmediato) *
+                    </Text>
+                    <View style={styles.contenedorMetodoPago}>
+                      <Pressable
+                        onPress={() => setIdTipoPagoCreacion(1)}
+                        style={[
+                          styles.opcionMetodoPago,
+                          idTipoPagoCreacion === 1 &&
+                            styles.opcionMetodoPagoActiva,
+                          isDark && {
+                            backgroundColor:
+                              idTipoPagoCreacion === 1
+                                ? "rgba(22, 163, 74, 0.15)"
+                                : colors.surfaceElevated,
+                            borderColor:
+                              idTipoPagoCreacion === 1
+                                ? "#16a34a"
+                                : colors.border,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name="cash-outline"
+                          size={20}
+                          color={
+                            idTipoPagoCreacion === 1
+                              ? "#16a34a"
+                              : colors.textSecondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.opcionMetodoPagoTexto,
+                            idTipoPagoCreacion === 1 &&
+                              styles.opcionMetodoPagoTextoActivo,
+                            isDark && {
+                              color:
+                                idTipoPagoCreacion === 1
+                                  ? "#4ade80"
+                                  : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          💵 Efectivo (Caja)
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => setIdTipoPagoCreacion(2)}
+                        style={[
+                          styles.opcionMetodoPago,
+                          idTipoPagoCreacion === 2 &&
+                            styles.opcionMetodoPagoActiva,
+                          isDark && {
+                            backgroundColor:
+                              idTipoPagoCreacion === 2
+                                ? "rgba(22, 163, 74, 0.15)"
+                                : colors.surfaceElevated,
+                            borderColor:
+                              idTipoPagoCreacion === 2
+                                ? "#16a34a"
+                                : colors.border,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name="qr-code-outline"
+                          size={20}
+                          color={
+                            idTipoPagoCreacion === 2
+                              ? "#16a34a"
+                              : colors.textSecondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.opcionMetodoPagoTexto,
+                            idTipoPagoCreacion === 2 &&
+                              styles.opcionMetodoPagoTextoActivo,
+                            isDark && {
+                              color:
+                                idTipoPagoCreacion === 2
+                                  ? "#4ade80"
+                                  : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          📱 Pago por QR
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
 
                 {/* 4. OBSERVACIÓN (OPCIONAL) */}
                 <View style={{ marginTop: 14, marginBottom: 16 }}>
@@ -2772,7 +3033,11 @@ export default function AsignacionPedidosScreen() {
                 style={[
                   styles.botonModal,
                   styles.botonConfirmar,
-                  { backgroundColor: colors.primary },
+                  {
+                    backgroundColor: esVentaDirectaCreacion
+                      ? "#16a34a"
+                      : colors.primary,
+                  },
                   (procesando ||
                     cargandoClientesPedido ||
                     !clienteSeleccionadoPedido ||
@@ -2785,7 +3050,9 @@ export default function AsignacionPedidosScreen() {
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.confirmarTexto}>
-                    Confirmar y Crear Pedido
+                    {esVentaDirectaCreacion
+                      ? "💵 Registrar Cobro y Entrega Inmediata"
+                      : "Confirmar y Crear Pedido"}
                   </Text>
                 )}
               </Pressable>

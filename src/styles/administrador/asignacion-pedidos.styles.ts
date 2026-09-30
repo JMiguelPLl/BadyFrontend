@@ -847,4 +847,94 @@ export const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#b82018",
   },
+
+  tipoVentaContenedor: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
+
+  tipoVentaBoton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+
+  tipoVentaBotonActivo: {
+    borderColor: "#b82018",
+    backgroundColor: "#fff7f7",
+  },
+
+  tipoVentaBotonTexto: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#475569",
+  },
+
+  tipoVentaBotonTextoActivo: {
+    color: "#b82018",
+  },
+
+  bannerVentaDirecta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    marginBottom: 14,
+  },
+
+  bannerVentaDirectaTexto: {
+    flex: 1,
+    fontSize: 12,
+    color: "#166534",
+    lineHeight: 17,
+    fontWeight: "600",
+  },
+
+  contenedorMetodoPago: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+
+  opcionMetodoPago: {
+    flex: 1,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+
+  opcionMetodoPagoActiva: {
+    borderColor: "#16a34a",
+    backgroundColor: "#f0fdf4",
+  },
+
+  opcionMetodoPagoTexto: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#475569",
+  },
+
+  opcionMetodoPagoTextoActivo: {
+    color: "#15803d",
+    fontWeight: "900",
+  },
 });
